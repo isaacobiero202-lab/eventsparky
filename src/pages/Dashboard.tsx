@@ -422,6 +422,22 @@ export function Dashboard() {
                               >
                                 Report
                               </button>
+                              <button
+                                id={`host-share-${ev.id}`}
+                                onClick={() => {
+                                  try {
+                                    const shareUrl = `${window.location.origin}/events/${ev.slug || ev.id}`;
+                                    navigator.clipboard.writeText(shareUrl);
+                                    alert('Event public share link copied to clipboard! 🚀');
+                                  } catch (e) {
+                                    alert('Could not copy share link.');
+                                  }
+                                }}
+                                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 pl-2 border-l border-slate-200 cursor-pointer"
+                                title="Copy public share link to clipboard"
+                              >
+                                Share
+                              </button>
                             </td>
                           </tr>
                         ))}

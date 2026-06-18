@@ -484,6 +484,17 @@ export function OrganizerControlCenter({
     }
   };
 
+  // Copy shareable public link to clipboard
+  const handleCopyShareLink = () => {
+    try {
+      const shareUrl = `${window.location.origin}/events/${event.slug || event.id}`;
+      navigator.clipboard.writeText(shareUrl);
+      setSuccessToast('Event public share link copied to clipboard! 🚀');
+    } catch (err: any) {
+      setErrorText('Failed to copy public share link: ' + err.message);
+    }
+  };
+
   // Remove Registration Override Action (Cancel registration on behalf of attendee)
   const handleRemoveRegistration = async (registrationId: string) => {
     if (confirm('Are you sure you want to remove/cancel this attendee\'s ticket registration?')) {
@@ -647,6 +658,14 @@ export function OrganizerControlCenter({
                 </div>
 
                 <div className="flex gap-2">
+                  <button
+                    id="host-share-event-btn"
+                    onClick={handleCopyShareLink}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 border border-indigo-500 rounded-xl text-xs font-bold text-white transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Share Event Link</span>
+                  </button>
                   <button
                     onClick={() => navigate(`/edit-event/${event.id}`)}
                     className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-bold text-white transition flex items-center gap-1.5"
@@ -970,6 +989,15 @@ export function OrganizerControlCenter({
                   >
                     <Printer className="w-3.5 h-3.5 shrink-0" />
                     <span>Print Event Ledger</span>
+                  </button>
+
+                  <button
+                    id="host-share-event-bottom-btn"
+                    onClick={handleCopyShareLink}
+                    className="flex-1 md:flex-initial inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-sky-50 hover:bg-sky-100 border border-sky-150 text-sky-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    <Share2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Copy Share Link</span>
                   </button>
 
                   <button

@@ -19,7 +19,8 @@ import {
   BadgePercent,
   Lock,
   Loader2,
-  PhoneCall
+  PhoneCall,
+  Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTickets, Ticket as TicketType } from '../../hooks/useTickets';
@@ -61,6 +62,13 @@ export function CheckoutModal({ event, onClose, onSuccess }: CheckoutModalProps)
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
+  
+  // Selected alternative payment method states
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'paypal' | 'wallet'>('card');
+  const [paypalEmail, setPaypalEmail] = useState(profile?.email || '');
+  const [walletType, setWalletType] = useState<'applepay' | 'googlepay' | 'mpesa'>('applepay');
+  const [walletPhone, setWalletPhone] = useState('');
+  const [mpesaName, setMpesaName] = useState(profile?.full_name || '');
   
   const [payLoading, setPayLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
@@ -153,13 +161,40 @@ export function CheckoutModal({ event, onClose, onSuccess }: CheckoutModalProps)
   // Final simulation action
   const handleCompletePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cardName.trim() || !cardNumber.trim() || !cardExpiry.trim() || !cardCvv.trim()) {
-      alert('Kindly configure all required billing card fields.');
-      return;
+    
+    if (paymentMethod === 'card') {
+      if (!cardName.trim() || !cardNumber.trim() || !cardExpiry.trim() || !cardCvv.trim()) {
+        alert('Kindly configure all required billing card fields.');
+        return;
+      }
+    } else if (paymentMethod === 'paypal') {
+      if (!paypalEmail.trim() || !paypalEmail.includes('@')) {
+        alert('Please configure a valid PayPal account email address.');
+        return;
+      }
+    } else if (paymentMethod === 'wallet') {
+      if (walletType === 'mpesa') {
+        if (!walletPhone.trim() || !mpesaName.trim()) {
+          alert('Kindly configure your Safaricom phone number and registered M-Pesa account name.');
+          return;
+        }
+      }
     }
 
     setPayLoading(true);
-    setLoadingStatus('Verifying payment authorization with gateway...');
+    if (paymentMethod === 'card') {
+      setLoadingStatus('Verifying payment authorization with gateway...');
+    } else if (paymentMethod === 'paypal') {
+      setLoadingStatus('Contacting PayPal secure servers for checkout authorization...');
+    } else if (paymentMethod === 'wallet') {
+      if (walletType === 'mpesa') {
+        setLoadingStatus('Triggering secure Safaricom M-Pesa STK Push PIN prompt on handset...');
+      } else if (walletType === 'applepay') {
+        setLoadingStatus('Waiting for Apple Pay biometrics (Touch ID / Face ID) approval...');
+      } else {
+        setLoadingStatus('Processing express checkout with Google Pay credentials...');
+      }
+    }
     
     try {
       // Step wise loader simulation for aesthetic high fidelity immersion
@@ -516,84 +551,293 @@ export function CheckoutModal({ event, onClose, onSuccess }: CheckoutModalProps)
             <form onSubmit={handleCompletePayment} className="space-y-5 text-left">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 
-                {/* Left Side: Billing form */}
-                <div className="space-y-3.5">
-                  <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider">Gateway Card Billing</h4>
+                {/* Left Side: Payment picker and dynamic form config */}
+                <div className="space-y-4">
                   
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Cardholder Full Name
+                  {/* Payment Method Tabs */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                      Payment Gateway Source
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder={profile?.full_name || "Jane Doe"}
-                      className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value)}
-                    />
-                  </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        id="pay-btn-card"
+                        onClick={() => setPaymentMethod('card')}
+                        className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-2xl border text-center transition cursor-pointer ${
+                          paymentMethod === 'card' 
+                          ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700 font-extrabold' 
+                          : 'border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <CreditCard className="w-5 h-5 mb-1" />
+                        <span className="text-[10px] tracking-tight">Credit Card</span>
+                      </button>
 
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Card Number
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="4000 1234 5678 9010"
-                      maxLength={19}
-                      className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                    />
-                  </div>
+                      <button
+                        type="button"
+                        id="pay-btn-paypal"
+                        onClick={() => setPaymentMethod('paypal')}
+                        className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-2xl border text-center transition cursor-pointer ${
+                          paymentMethod === 'paypal' 
+                          ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700 font-extrabold' 
+                          : 'border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <Mail className="w-5 h-5 mb-1" />
+                        <span className="text-[10px] tracking-tight">PayPal</span>
+                      </button>
 
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                        Expiration
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="MM/YY"
-                        maxLength={5}
-                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50 text-center"
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(e.target.value)}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                        CVC/CVV Code
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="•••"
-                        maxLength={4}
-                        className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50 text-center"
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value)}
-                      />
+                      <button
+                        type="button"
+                        id="pay-btn-wallet"
+                        onClick={() => setPaymentMethod('wallet')}
+                        className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-2xl border text-center transition cursor-pointer ${
+                          paymentMethod === 'wallet' 
+                          ? 'border-indigo-600 bg-indigo-50/20 text-indigo-700 font-extrabold' 
+                          : 'border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <Wallet className="w-5 h-5 mb-1" />
+                        <span className="text-[10px] tracking-tight">Digital Pay</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Billing Street Address
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="120 Market St, San Francisco, CA"
-                      className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
-                      value={billingAddress}
-                      onChange={(e) => setBillingAddress(e.target.value)}
-                    />
-                  </div>
+                  {/* Conditionally render form based on chosen paymentMethod */}
+                  <AnimatePresence mode="wait">
+                    {paymentMethod === 'card' && (
+                      <motion.div
+                        key="card-form"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="space-y-3"
+                      >
+                        <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider">Gateway Card Billing</h4>
+                        
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Cardholder Full Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder={profile?.full_name || "Jane Doe"}
+                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
+                            value={cardName}
+                            onChange={(e) => setCardName(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Card Number
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="4000 1234 5678 9010"
+                            maxLength={19}
+                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
+                            value={cardNumber}
+                            onChange={(e) => setCardNumber(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3.5">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                              Expiration
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="MM/YY"
+                              maxLength={5}
+                              className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50 text-center"
+                              value={cardExpiry}
+                              onChange={(e) => setCardExpiry(e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                              CVC/CVV Code
+                            </label>
+                            <input
+                              type="password"
+                              required
+                              placeholder="•••"
+                              maxLength={4}
+                              className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50 text-center"
+                              value={cardCvv}
+                              onChange={(e) => setCardCvv(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Billing Street Address
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="120 Market St, San Francisco, CA"
+                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
+                            value={billingAddress}
+                            onChange={(e) => setBillingAddress(e.target.value)}
+                          />
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {paymentMethod === 'paypal' && (
+                      <motion.div
+                        key="paypal-form"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="space-y-3.5"
+                      >
+                        <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider">PayPal Authorization</h4>
+                        
+                        <div className="p-4 bg-indigo-50/25 border border-indigo-100/55 rounded-2xl flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-extrabold text-sm font-mono tracking-tighter">
+                            PP
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-black text-slate-850">Express Checkout with PayPal</h5>
+                            <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                              Sign in via secure OAuth popup to complete payment.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            PayPal Email Address
+                          </label>
+                          <input
+                            type="email"
+                            required
+                            placeholder="paypal-member@example.com"
+                            className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50 font-mono"
+                            value={paypalEmail}
+                            onChange={(e) => setPaypalEmail(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
+                          <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                            🔒 <strong>Instant Verification</strong>: PayPal transactions are simulated instantaneously. No actual charges are made to your account.
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {paymentMethod === 'wallet' && (
+                      <motion.div
+                        key="wallet-form"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="space-y-3.5"
+                      >
+                        <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider">Digital Wallet / Mobile Pay</h4>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setWalletType('applepay')}
+                            className={`py-2 px-1 rounded-xl border text-center transition cursor-pointer font-bold text-[10px] ${
+                              walletType === 'applepay' 
+                              ? 'border-black bg-slate-950 text-white' 
+                              : 'border-slate-250 bg-white text-slate-600 hover:border-slate-350'
+                            }`}
+                          >
+                             Apple Pay
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setWalletType('googlepay')}
+                            className={`py-2 px-1 rounded-xl border text-center transition cursor-pointer font-extrabold text-[10px] ${
+                              walletType === 'googlepay' 
+                              ? 'border-indigo-650 bg-indigo-50 text-indigo-805' 
+                              : 'border-slate-250 bg-white text-slate-600 hover:border-slate-350'
+                            }`}
+                          >
+                            Google Pay
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setWalletType('mpesa')}
+                            className={`py-2 px-1 rounded-xl border text-center transition cursor-pointer font-extrabold text-[10px] ${
+                              walletType === 'mpesa' 
+                              ? 'border-emerald-600 bg-emerald-50 text-emerald-800' 
+                              : 'border-slate-250 bg-white text-slate-600 hover:border-slate-350'
+                            }`}
+                          >
+                            M-Pesa Mobile
+                          </button>
+                        </div>
+
+                        {walletType === 'mpesa' ? (
+                          <div className="space-y-3 pt-1">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                M-Pesa Registered Full Name
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Isaac Obiero"
+                                className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
+                                value={mpesaName}
+                                onChange={(e) => setMpesaName(e.target.value)}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                                Safaricom Mobile Phone Number
+                              </label>
+                              <div className="relative">
+                                <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                                <input
+                                  type="tel"
+                                  required
+                                  placeholder="2547XXXXXXXX"
+                                  className="w-full text-xs pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-slate-805 bg-slate-50/50"
+                                  value={walletPhone}
+                                  onChange={(e) => setWalletPhone(e.target.value)}
+                                />
+                              </div>
+                              <p className="text-[9px] text-emerald-700 mt-1 font-bold leading-normal">
+                                SIM STK push prompt gets triggered immediately on your handset to authorize transaction.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+                            <span className="block font-black text-[11px] text-slate-800">
+                              {walletType === 'applepay' ? ' Apple Pay Express checkout' : 'Google Pay Direct Check'}
+                            </span>
+                            <p className="text-[10px] text-slate-405 leading-relaxed font-semibold">
+                              Pay easily with cards vaulted in your browser or phone biometric database (Touch ID / Face ID).
+                            </p>
+                            <div className="border border-slate-200/60 bg-white py-1.5 px-3 rounded-lg flex items-center justify-between text-[11px] text-slate-500 font-bold mt-2">
+                              <span>Express Authorization:</span>
+                              <span className="text-emerald-600">Simulate Ready ✅</span>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Right Side: Promo Code & Order Summary receipt */}
