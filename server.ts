@@ -15,64 +15,12 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Global pool of connected SSE streams for real-time notifications
-  const sseClients: { id: string; userId: string; res: any }[] = [];
-
-  // API ROUTE: Subscribe to notifications via SSE (Server-Sent Events)
-  app.get('/api/notifications/subscribe', (req, res) => {
-    const { userId } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required for subscription' });
-    }
-
-    // Standard SSE Headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    });
-
-    const clientId = Date.now().toString() + Math.random().toString(36).slice(2, 9);
-    const newClient = {
-      id: clientId,
-      userId: userId as string,
-      res
-    };
-
-    sseClients.push(newClient);
-
-    // Initial connection ping
-    res.write('data: {"type": "connected"}\n\n');
-
-    // Heartbeat every 15 seconds to prevent stream timeout/closure
-    const heartbeat = setInterval(() => {
-      res.write(':\n\n');
-    }, 15000);
-
-    req.on('close', () => {
-      clearInterval(heartbeat);
-      const index = sseClients.findIndex(c => c.id === clientId);
-      if (index !== -1) {
-        sseClients.splice(index, 1);
-      }
-    });
-  });
-
-  // API ROUTE: Trigger / Publish notification to connected subscribers
+  // API ROUTE: Trigger / Publish notification logs or mock SMTP dispatches
   app.post('/api/notifications/emit', (req, res) => {
     const notification = req.body;
     if (!notification || !notification.user_id) {
       return res.status(400).json({ error: 'Notification and target recipient user_id is required' });
     }
-
-    // Broadcast notification to all matching client streams
-    let txCount = 0;
-    sseClients.forEach(client => {
-      if (client.userId === notification.user_id) {
-        client.res.write(`data: ${JSON.stringify(notification)}\n\n`);
-        txCount++;
-      }
-    });
 
     // Handle optional secure email logging alongside
     if (notification.emailEnabled !== false) {
@@ -86,78 +34,16 @@ async function startServer() {
       console.log(`\x1b[35m===================================================\x1b[0m\n`);
     }
 
-    res.json({ success: true, sseBroadcastCount: txCount });
+    res.json({ success: true, sseBroadcastCount: 0 });
   });
 
-  // Global pool of connected SSE streams for real-time activity log feed
-  const sseActivityClients: { id: string; userId: string; res: any }[] = [];
-
-  // API ROUTE: Subscribe to activity logs via SSE (Server-Sent Events)
-  app.get('/api/activity-logs/subscribe', (req, res) => {
-    const { userId } = req.query;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required for subscription' });
-    }
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    });
-
-    const clientId = Date.now().toString() + Math.random().toString(36).slice(2, 9);
-    const newClient = {
-      id: clientId,
-      userId: userId as string,
-      res
-    };
-
-    sseActivityClients.push(newClient);
-
-    // Initial connection ping
-    res.write('data: {"type": "connected"}\n\n');
-
-    const heartbeat = setInterval(() => {
-      res.write(':\n\n');
-    }, 15000);
-
-    req.on('close', () => {
-      clearInterval(heartbeat);
-      const index = sseActivityClients.findIndex(c => c.id === clientId);
-      if (index !== -1) {
-        sseActivityClients.splice(index, 1);
-      }
-    });
-  });
-
-  // API ROUTE: Broadcaster for Real-time Activity Logs
+  // API ROUTE: Broadcaster for Real-time Activity Logs (silent log helper)
   app.post('/api/activity-logs/emit', (req, res) => {
     const activity = req.body;
     if (!activity) {
       return res.status(400).json({ error: 'Activity details are required' });
     }
-
-    let txCount = 0;
-    sseActivityClients.forEach(client => {
-      // Send if client is user who triggered it, OR matches the organizer recipient, or role is admin
-      if (
-        client.userId === activity.user_id || 
-        (activity.target_organizer_id && client.userId === activity.target_organizer_id)
-      ) {
-        client.res.write(`data: ${JSON.stringify(activity)}\n\n`);
-        txCount++;
-      }
-    });
-
-    res.json({ success: true, sseBroadcastCount: txCount });
-  });
-
-  // API ROUTE: Get Supabase Credentials dynamically from backend environment
-  app.get('/api/supabase-config', (req, res) => {
-    res.json({
-      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
-      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
-    });
+    res.json({ success: true, sseBroadcastCount: 0 });
   });
 
   // Initialize server-side Gemini AI client securely

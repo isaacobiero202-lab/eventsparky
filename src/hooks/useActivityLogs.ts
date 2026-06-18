@@ -131,14 +131,23 @@ export function useActivityLogs() {
         const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
         localLogs.push(newLog);
         localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+
+        // For local mock real-time update
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mock-activity-changes', { detail: newLog }));
+        }
       }
     } catch (err) {
       const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
       localLogs.push(newLog);
       localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mock-activity-changes', { detail: newLog }));
+      }
     }
 
-    // 2. Broadcast via SSE for real-time dashboard listeners
+    // 2. Broadcast via REST helper for admin notification triggers (silent optional fallback)
     try {
       await fetch('/api/activity-logs/emit', {
         method: 'POST',
@@ -148,39 +157,75 @@ export function useActivityLogs() {
           target_organizer_id: targetOrganizerId
         })
       });
-    } catch (err: any) {
-      console.warn('Real-time log broadcast failed:', err.message);
-    }
+    } catch {}
   }, [profile]);
 
-  // Handle SSE live subscription
+  // Handle Supabase Realtime subscription
   useEffect(() => {
     if (!profile) return;
 
     fetchLogs();
 
-    // Subscribe to SSE active emitter
-    const eventSource = new EventSource(`/api/activity-logs/subscribe?userId=${profile.id}`);
+    // Subscribe to public database mutations via Supabase Realtime channel
+    const channel = supabase
+      .channel(`activity-logs-session-${Math.random().toString(36).slice(2, 9)}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_logs'
+        },
+        (payload: any) => {
+          const data = payload.new;
+          if (data) {
+            console.log('Real-time activity log via Supabase Realtime received:', data);
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') return;
+            const isRelevant = 
+              profile.role === 'admin' ||
+              data.user_id === profile.id ||
+              (data.target_organizer_id && data.target_organizer_id === profile.id);
 
-        console.log('Real-time activity log received on SSE:', data);
+            if (isRelevant) {
+              setLogs(prev => {
+                if (prev.some(log => log.id === data.id)) return prev;
+                return [data, ...prev];
+              });
+            }
+          }
+        }
+      )
+      .subscribe((status: string) => {
+        console.log(`Supabase Realtime activity logs channel status: ${status}`);
+      });
 
-        // Prepend to active state list
-        setLogs(prev => {
-          if (prev.some(log => log.id === data.id)) return prev;
-          return [data, ...prev];
-        });
-      } catch (err) {
-        console.error('Failed to parse incoming real-time activity:', err);
+    // Also bind custom mock listener for dual compatibility in local demo sandbox
+    const handleMockActivity = (e: any) => {
+      const data = e.detail;
+      if (data) {
+        const isRelevant = 
+          profile.role === 'admin' ||
+          data.user_id === profile.id ||
+          (data.target_organizer_id && data.target_organizer_id === profile.id);
+
+        if (isRelevant) {
+          setLogs(prev => {
+            if (prev.some(log => log.id === data.id)) return prev;
+            return [data, ...prev];
+          });
+        }
       }
     };
 
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mock-activity-changes', handleMockActivity);
+    }
+
     return () => {
-      eventSource.close();
+      supabase.removeChannel(channel);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('mock-activity-changes', handleMockActivity);
+      }
     };
   }, [profile, fetchLogs]);
 

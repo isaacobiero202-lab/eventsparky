@@ -585,6 +585,40 @@ class MockSupabaseClient {
       };
     }
   };
+
+  channel(name: string) {
+    return {
+      on(event: string, filterConfig: any, callback: any) {
+        const handler = (e: any) => {
+          if (e.detail) {
+            callback({ new: e.detail });
+          }
+        };
+        if (typeof window !== 'undefined') {
+          window.addEventListener('mock-postgres-changes', handler);
+        }
+        (this as any)._handler = handler;
+        return this;
+      },
+      subscribe(statusCb?: any) {
+        if (statusCb) {
+          setTimeout(() => statusCb('SUBSCRIBED'), 10);
+        }
+        return this;
+      },
+      unsubscribe() {
+        if (typeof window !== 'undefined' && (this as any)._handler) {
+          window.removeEventListener('mock-postgres-changes', (this as any)._handler);
+        }
+      }
+    };
+  }
+
+  removeChannel(channel: any) {
+    if (channel && typeof channel.unsubscribe === 'function') {
+      channel.unsubscribe();
+    }
+  }
 }
 
 // Define mock client fallback instance
@@ -698,6 +732,15 @@ function sanitizeArgs(prop: string | symbol, args: any[]): any[] {
   return args;
 }
 
+function unwrapArg(arg: any): any {
+  if (arg && typeof arg === 'object') {
+    if (arg._realObj !== undefined) {
+      return arg._realObj;
+    }
+  }
+  return arg;
+}
+
 function makeSafeProxy(realObj: any, fallbackObj: any, chain: FluentChain = new FluentChain()): any {
   if (realObj === null || realObj === undefined) {
     return realObj;
@@ -705,6 +748,10 @@ function makeSafeProxy(realObj: any, fallbackObj: any, chain: FluentChain = new 
 
   return new Proxy(realObj, {
     get(target, prop) {
+      if (prop === '_realObj') {
+        return realObj;
+      }
+
       // Handle promise resolution via thenable interface
       if (prop === 'then') {
         return function(onfulfilled: any, onrejected: any) {
@@ -772,7 +819,8 @@ function makeSafeProxy(realObj: any, fallbackObj: any, chain: FluentChain = new 
 
       if (typeof nextReal === 'function') {
         return function(...args: any[]) {
-          const sanitizedArgs = sanitizeArgs(prop, args);
+          const unwrappedArgs = args.map(unwrapArg);
+          const sanitizedArgs = sanitizeArgs(prop, unwrappedArgs);
           const boundReal = nextReal.bind(realObj);
           const boundFallback = typeof nextFallback === 'function' ? nextFallback.bind(fallbackObj) : nextFallback;
 
@@ -798,6 +846,9 @@ function makeSafeProxy(realObj: any, fallbackObj: any, chain: FluentChain = new 
 // Export the dynamic proxied client
 export const supabase = new Proxy({}, {
   get(target, prop) {
+    if (prop === '_realObj') {
+      return activeClient || mockClientFallback;
+    }
     const current = activeClient || mockClientFallback;
     const value = current[prop];
 
@@ -809,7 +860,8 @@ export const supabase = new Proxy({}, {
 
       if (typeof value === 'function') {
         return function(...args: any[]) {
-          const sanitizedArgs = sanitizeArgs(prop, args);
+          const unwrappedArgs = args.map(unwrapArg);
+          const sanitizedArgs = sanitizeArgs(prop, unwrappedArgs);
           const resReal = value.bind(activeClient)(...sanitizedArgs);
           const resFallback = typeof fallbackValue === 'function' ? fallbackValue.bind(mockClientFallback)(...args) : fallbackValue;
           
@@ -828,7 +880,10 @@ export const supabase = new Proxy({}, {
 
     // Otherwise, directly run off the mock client
     if (typeof value === 'function') {
-      return value.bind(mockClientFallback);
+      return function(...args: any[]) {
+        const unwrappedArgs = args.map(unwrapArg);
+        return value.bind(mockClientFallback)(...unwrappedArgs);
+      };
     }
     return value;
   }

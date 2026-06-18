@@ -160,17 +160,24 @@ export function useNotifications() {
         const localData = JSON.parse(localStorage.getItem('mock_notifications') || '[]');
         localData.push(newNotification);
         localStorage.setItem('mock_notifications', JSON.stringify(localData));
+
+        // For local mock real-time update
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mock-postgres-changes', { detail: newNotification }));
+        }
       }
 
-      // 2. Broadcast inside the server SSE stream
-      await fetch('/api/notifications/emit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newNotification,
-          emailEnabled // Send whether the recipient/sender prefers mock emails dispatching
-        })
-      });
+      // 2. Broadcast inside the server SMTP mock log (silent fallback helper)
+      try {
+        await fetch('/api/notifications/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...newNotification,
+            emailEnabled
+          })
+        });
+      } catch {}
     } catch (err: any) {
       console.warn('Notify broadcast failure: ', err.message);
     }
@@ -189,50 +196,45 @@ export function useNotifications() {
 
     fetchNotifications();
 
-    // Setup Server-Sent Events client
-    const eventSource = new EventSource(`/api/notifications/subscribe?userId=${profile.id}`);
+    // Setup Supabase Realtime channel subscription
+    const channel = supabase
+      .channel(`notifications-user-${profile.id}-${Math.random().toString(36).slice(2, 9)}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${profile.id}`
+        },
+        (payload: any) => {
+          const data = payload.new as Notification;
+          if (data && data.user_id === profile.id) {
+            console.log('Real-time notification via Supabase Realtime received:', data);
+            
+            // Invalidate query caching layer upon receipt of any realtime update message
+            queryCache.clear();
+            
+            setNotifications(prev => {
+              if (prev.some(notif => notif.id === data.id)) return prev;
+              return [data, ...prev];
+            });
 
-    eventSource.onopen = () => {
-      console.log(`SSE notification path connected for user ${profile.id}`);
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') return;
-
-        console.log('Real-time notification socket event received:', data);
-        
-        // Invalidate query caching layer upon receipt of any realtime update message
-        queryCache.clear();
-        
-        // Check if recipient matches or matches everyone (broadcast for attendee)
-        if (data.user_id === profile.id) {
-          // Prepend to list in state
-          setNotifications(prev => {
-            // Guard duplicate reads of the exact same ID
-            if (prev.some(notif => notif.id === data.id)) return prev;
-            return [data, ...prev];
-          });
-
-          // Dispatch visual browser notification chime/audio
-          try {
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav');
-            audio.volume = 0.35;
-            audio.play().catch(() => {});
-          } catch (ae) {}
+            // Dispatch visual browser notification chime/audio
+            try {
+              const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav');
+              audio.volume = 0.35;
+              audio.play().catch(() => {});
+            } catch (ae) {}
+          }
         }
-      } catch (err) {
-        console.error('Error parsing SSE event data:', err);
-      }
-    };
-
-    eventSource.onerror = (err) => {
-      console.warn('SSE subscription error or timeout (will auto-reconnect):', err);
-    };
+      )
+      .subscribe((status: string) => {
+        console.log(`Supabase Realtime notifications subscription status: ${status}`);
+      });
 
     return () => {
-      eventSource.close();
+      supabase.removeChannel(channel);
     };
   }, [profile, fetchNotifications]);
 

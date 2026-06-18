@@ -62,46 +62,39 @@ export function Navbar() {
 
           {/* Desktop Nav Links */}
           <div className="hidden md:flex items-center space-x-1">
-            <Link to="/events" className={linkClass('/events')}>
-              <Calendar className="w-4 h-4" />
-              <span>Browse Events</span>
-            </Link>
-
-            {profile && (
+            {profile ? (
               <>
-                {/* Organize events links */}
-                {profile.role === 'organizer' && (
-                  <>
-                    <Link to="/create-event" className={linkClass('/create-event')}>
-                      <PlusCircle className="w-4 h-4" />
-                      <span>Create Event</span>
-                    </Link>
-                    <Link to="/dashboard" className={linkClass('/dashboard')}>
-                      <LayoutDashboard className="w-4 h-4" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </>
-                )}
-
-                {/* Attendee registrations links */}
-                {profile.role === 'attendee' && (
-                  <>
-                    <Link to="/my-registrations" className={linkClass('/my-registrations')}>
-                      <ClipboardList className="w-4 h-4" />
-                      <span>My Registrations</span>
-                    </Link>
-                    <Link to="/dashboard" className={linkClass('/dashboard')}>
-                      <LayoutDashboard className="w-4 h-4" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </>
-                )}
-
-                {/* Admin Analytics link */}
-                {profile.role === 'admin' && (
+                {/* 1. Dashboard (always first when logged in) */}
+                {profile.role !== 'admin' ? (
+                  <Link to="/dashboard" className={linkClass('/dashboard')}>
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                ) : (
                   <Link to="/admin-analytics" className={linkClass('/admin-analytics')}>
                     <BarChart2 className="w-4 h-4" />
                     <span>Admin Analytics</span>
+                  </Link>
+                )}
+
+                {/* 2. Browse Events (second when logged in) */}
+                <Link to="/events" className={linkClass('/events')}>
+                  <Calendar className="w-4 h-4" />
+                  <span>Browse Events</span>
+                </Link>
+
+                {/* 3. Role-specific Actions */}
+                {profile.role === 'organizer' && (
+                  <Link to="/create-event" className={linkClass('/create-event')}>
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Create Event</span>
+                  </Link>
+                )}
+
+                {profile.role === 'attendee' && (
+                  <Link to="/my-registrations" className={linkClass('/my-registrations')}>
+                    <ClipboardList className="w-4 h-4" />
+                    <span>My Registrations</span>
                   </Link>
                 )}
 
@@ -132,6 +125,12 @@ export function Navbar() {
                   <span>Logout</span>
                 </button>
               </>
+            ) : (
+              /* If not logged in, Browse Events is the primary link */
+              <Link to="/events" className={linkClass('/events')}>
+                <Calendar className="w-4 h-4" />
+                <span>Browse Events</span>
+              </Link>
             )}
 
             {!profile && (
@@ -174,60 +173,19 @@ export function Navbar() {
       {isOpen && (
         <div className="md:hidden border-t border-slate-100 bg-white transition-colors duration-200">
           <div className="px-2 pt-2 pb-3 space-y-1">
-            <Link
-              to="/events"
-              onClick={() => setIsOpen(false)}
-              className={mobileLinkClass('/events')}
-            >
-              <Calendar className="w-5 h-5" />
-              <span>Browse Events</span>
-            </Link>
-
             {profile ? (
               <>
-                {profile.role === 'organizer' && (
-                  <>
-                    <Link
-                      to="/create-event"
-                      onClick={() => setIsOpen(false)}
-                      className={mobileLinkClass('/create-event')}
-                    >
-                      <PlusCircle className="w-5 h-5" />
-                      <span>Create Event</span>
-                    </Link>
-                    <Link
-                      to="/dashboard"
-                      onClick={() => setIsOpen(false)}
-                      className={mobileLinkClass('/dashboard')}
-                    >
-                      <LayoutDashboard className="w-5 h-5" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </>
-                )}
-
-                {profile.role === 'attendee' && (
-                  <>
-                    <Link
-                      to="/my-registrations"
-                      onClick={() => setIsOpen(false)}
-                      className={mobileLinkClass('/my-registrations')}
-                    >
-                      <ClipboardList className="w-5 h-5" />
-                      <span>My Registrations</span>
-                    </Link>
-                    <Link
-                      to="/dashboard"
-                      onClick={() => setIsOpen(false)}
-                      className={mobileLinkClass('/dashboard')}
-                    >
-                      <LayoutDashboard className="w-5 h-5" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </>
-                )}
-
-                {profile.role === 'admin' && (
+                {/* 1. Dashboard first when logged in */}
+                {profile.role !== 'admin' ? (
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setIsOpen(false)}
+                    className={mobileLinkClass('/dashboard')}
+                  >
+                    <LayoutDashboard className="w-5 h-5" />
+                    <span>Dashboard</span>
+                  </Link>
+                ) : (
                   <Link
                     to="/admin-analytics"
                     onClick={() => setIsOpen(false)}
@@ -235,6 +193,39 @@ export function Navbar() {
                   >
                     <BarChart2 className="w-5 h-5" />
                     <span>Admin Analytics</span>
+                  </Link>
+                )}
+
+                {/* 2. Browse Events always next */}
+                <Link
+                  to="/events"
+                  onClick={() => setIsOpen(false)}
+                  className={mobileLinkClass('/events')}
+                >
+                  <Calendar className="w-5 h-5" />
+                  <span>Browse Events</span>
+                </Link>
+
+                {/* 3. Role-specific Actions */}
+                {profile.role === 'organizer' && (
+                  <Link
+                    to="/create-event"
+                    onClick={() => setIsOpen(false)}
+                    className={mobileLinkClass('/create-event')}
+                  >
+                    <PlusCircle className="w-5 h-5" />
+                    <span>Create Event</span>
+                  </Link>
+                )}
+
+                {profile.role === 'attendee' && (
+                  <Link
+                    to="/my-registrations"
+                    onClick={() => setIsOpen(false)}
+                    className={mobileLinkClass('/my-registrations')}
+                  >
+                    <ClipboardList className="w-5 h-5" />
+                    <span>My Registrations</span>
                   </Link>
                 )}
 
@@ -259,22 +250,32 @@ export function Navbar() {
                 </button>
               </>
             ) : (
-              <div className="pt-4 pb-2 border-t border-slate-100 flex flex-col space-y-2 px-3">
+              <>
                 <Link
-                  to="/login"
+                  to="/events"
                   onClick={() => setIsOpen(false)}
-                  className="text-center w-full px-4 py-2.5 border border-slate-200 rounded-lg text-slate-700 font-medium hover:bg-slate-50"
+                  className={mobileLinkClass('/events')}
                 >
-                  Sign In
+                  <Calendar className="w-5 h-5" />
+                  <span>Browse Events</span>
                 </Link>
-                <Link
-                  to="/register"
-                  onClick={() => setIsOpen(false)}
-                  className="text-center w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
-                >
-                  Get Started
-                </Link>
-              </div>
+                <div className="pt-4 pb-2 border-t border-slate-100 flex flex-col space-y-2 px-3">
+                  <Link
+                    to="/login"
+                    onClick={() => setIsOpen(false)}
+                    className="text-center w-full px-4 py-2.5 border border-slate-200 rounded-lg text-slate-700 font-medium hover:bg-slate-50"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    onClick={() => setIsOpen(false)}
+                    className="text-center w-full px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
+                  >
+                    Get Started
+                  </Link>
+                </div>
+              </>
             )}
           </div>
         </div>
