@@ -1,3 +1,4 @@
+import legacy from '@vitejs/plugin-legacy';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -5,11 +6,20 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      legacy({
+        targets: ['Firefox >= 90', 'Chrome >= 90', 'Safari >= 14'],
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    build: {
+      target: 'es2018',
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
