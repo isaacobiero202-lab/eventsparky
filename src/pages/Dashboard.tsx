@@ -347,102 +347,196 @@ export function Dashboard() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold uppercase">
-                          <th className="py-3 px-4">Event Info</th>
-                          <th className="py-3 px-4">Date / Venue</th>
-                          <th className="py-3 px-4">Registrants</th>
-                          <th className="py-3 px-4">Price</th>
-                          <th className="py-3 px-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50 text-sm text-slate-700">
-                        {orgEvents.map((ev) => (
-                          <tr key={ev.id} className="hover:bg-slate-50/50 transition duration-150">
-                            <td className="py-3 px-4 flex items-center space-x-3.5">
-                              {ev.image_url ? (
-                                <img
-                                  src={ev.image_url}
-                                  alt={ev.title}
-                                  className="w-10 h-10 rounded-md object-cover border border-slate-100"
-                                  referrerPolicy="no-referrer"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center font-bold text-xs border border-indigo-100">
-                                  ES
+                  <div>
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-slate-400 text-xs font-bold uppercase">
+                            <th className="py-3 px-4">Event Info</th>
+                            <th className="py-3 px-4">Date / Venue</th>
+                            <th className="py-3 px-4">Registrants</th>
+                            <th className="py-3 px-4">Price</th>
+                            <th className="py-3 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-sm text-slate-700">
+                          {orgEvents.map((ev) => (
+                            <tr key={ev.id} className="hover:bg-slate-50/50 transition duration-150">
+                              <td className="py-3 px-4 flex items-center space-x-3.5">
+                                {ev.image_url ? (
+                                  <img
+                                    src={ev.image_url}
+                                    alt={ev.title}
+                                    className="w-10 h-10 rounded-md object-cover border border-slate-100"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-md flex items-center justify-center font-bold text-xs border border-indigo-100">
+                                    ES
+                                  </div>
+                                )}
+                                <div className="truncate max-w-[180px]">
+                                  <Link to={`/events/${ev.id}`} className="font-bold text-slate-500 hover:text-indigo-600 truncate block">
+                                    {ev.title}
+                                  </Link>
+                                  <span className="text-[10px] text-slate-400 leading-none">ID: {ev.id.slice(0,8)}...</span>
                                 </div>
-                              )}
-                              <div className="truncate max-w-[180px]">
-                                <Link to={`/events/${ev.id}`} className="font-bold text-slate-500 hover:text-indigo-600 truncate block">
-                                  {ev.title}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="font-medium text-slate-700 text-xs">{formatDate(ev.event_date)}</div>
+                                <div className="text-[10px] text-slate-400 font-medium flex items-center space-x-1 mt-0.5">
+                                  <MapPin className="w-3 h-3 text-slate-350 shrink-0" />
+                                  <span className="truncate max-w-[120px]">{ev.location}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/30">
+                                  {ev.registration_count || 0} / {ev.capacity === 0 ? '∞' : ev.capacity}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-xs font-extrabold text-slate-900">
+                                {formatPrice(ev.price)}
+                              </td>
+                              <td className="py-3 px-4 text-right space-x-2">
+                                <Link
+                                  to={`/events/${ev.id}`}
+                                  className="text-xs font-bold text-indigo-600 hover:underline"
+                                >
+                                  View
                                 </Link>
-                                <span className="text-[10px] text-slate-400 leading-none">ID: {ev.id.slice(0,8)}...</span>
+                                <Link
+                                  to={`/edit-event/${ev.id}`}
+                                  className="text-xs font-bold text-slate-500 hover:text-indigo-600 pl-2 border-l border-slate-200"
+                                >
+                                  Edit
+                                </Link>
+                                <button
+                                  onClick={() => handleDeleteEvent(ev.id)}
+                                  className="text-xs font-bold text-rose-500 hover:text-rose-700 pl-2 border-l border-slate-200 cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={() => handleGenerateReport(ev.title, ev.id)}
+                                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 pl-2 border-l border-slate-200 cursor-pointer"
+                                  title="Export complete audit trail as CSV"
+                                >
+                                  Report
+                                </button>
+                                <button
+                                  id={`host-share-${ev.id}`}
+                                  onClick={() => {
+                                    try {
+                                      const shareUrl = `${window.location.origin}/events/${ev.slug || ev.id}`;
+                                      navigator.clipboard.writeText(shareUrl);
+                                      alert('Event public share link copied to clipboard! 🚀');
+                                    } catch (e) {
+                                      alert('Could not copy share link.');
+                                    }
+                                  }}
+                                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 pl-2 border-l border-slate-200 cursor-pointer"
+                                  title="Copy public share link to clipboard"
+                                >
+                                  Share
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Cards Stack View */}
+                    <div className="block md:hidden space-y-4">
+                      {orgEvents.map((ev) => (
+                        <div key={ev.id} className="p-4 border border-slate-100 rounded-2xl bg-slate-50/40 hover:bg-white hover:shadow-xs transition duration-200 space-y-3.5">
+                          <div className="flex items-center space-x-3">
+                            {ev.image_url ? (
+                              <img
+                                src={ev.image_url}
+                                alt={ev.title}
+                                className="w-12 h-12 rounded-xl object-cover border border-slate-100 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border border-indigo-100">
+                                ES
                               </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="font-medium text-slate-700 text-xs">{formatDate(ev.event_date)}</div>
-                              <div className="text-[10px] text-slate-400 font-medium flex items-center space-x-1 mt-0.5">
-                                <MapPin className="w-3 h-3 text-slate-350 shrink-0" />
-                                <span className="truncate max-w-[120px]">{ev.location}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100/30">
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <Link to={`/events/${ev.id}`} className="font-extrabold text-sm text-slate-800 hover:text-indigo-605 truncate block">
+                                {ev.title}
+                              </Link>
+                              <span className="text-[10px] text-slate-400 font-mono">ID: {ev.id.slice(0,8)}...</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2.5 pt-1 border-t border-slate-100/60 text-xs">
+                            <div>
+                              <span className="block text-[10px] uppercase font-bold text-slate-400">Date</span>
+                              <span className="font-semibold text-slate-750">{formatDate(ev.event_date)}</span>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-bold text-slate-400">Venue</span>
+                              <span className="font-semibold text-slate-750 truncate block">{ev.location}</span>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-bold text-slate-400">Registrants</span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md font-bold text-[10.5px] bg-emerald-50 text-emerald-800 border border-emerald-100/30">
                                 {ev.registration_count || 0} / {ev.capacity === 0 ? '∞' : ev.capacity}
                               </span>
-                            </td>
-                            <td className="py-3 px-4 text-xs font-extrabold text-slate-900">
-                              {formatPrice(ev.price)}
-                            </td>
-                            <td className="py-3 px-4 text-right space-x-2">
-                              <Link
-                                to={`/events/${ev.id}`}
-                                className="text-xs font-bold text-indigo-600 hover:underline"
-                              >
-                                View
-                              </Link>
-                              <Link
-                                to={`/edit-event/${ev.id}`}
-                                className="text-xs font-bold text-slate-500 hover:text-indigo-600 pl-2 border-l border-slate-200"
-                              >
-                                Edit
-                              </Link>
-                              <button
-                                onClick={() => handleDeleteEvent(ev.id)}
-                                className="text-xs font-bold text-rose-500 hover:text-rose-700 pl-2 border-l border-slate-200 cursor-pointer"
-                              >
-                                Delete
-                              </button>
-                              <button
-                                onClick={() => handleGenerateReport(ev.title, ev.id)}
-                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 pl-2 border-l border-slate-200 cursor-pointer"
-                                title="Export complete audit trail as CSV"
-                              >
-                                Report
-                              </button>
-                              <button
-                                id={`host-share-${ev.id}`}
-                                onClick={() => {
-                                  try {
-                                    const shareUrl = `${window.location.origin}/events/${ev.slug || ev.id}`;
-                                    navigator.clipboard.writeText(shareUrl);
-                                    alert('Event public share link copied to clipboard! 🚀');
-                                  } catch (e) {
-                                    alert('Could not copy share link.');
-                                  }
-                                }}
-                                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 pl-2 border-l border-slate-200 cursor-pointer"
-                                title="Copy public share link to clipboard"
-                              >
-                                Share
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase font-bold text-slate-400">Price</span>
+                              <span className="font-black text-slate-800">{formatPrice(ev.price)}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100/60">
+                            <Link
+                              to={`/events/${ev.id}`}
+                              className="flex-1 text-center py-2 px-3 bg-white hover:bg-slate-50 text-xs font-bold text-indigo-650 border border-slate-205 rounded-xl transition shadow-3xs"
+                            >
+                              View
+                            </Link>
+                            <Link
+                              to={`/edit-event/${ev.id}`}
+                              className="flex-1 text-center py-2 px-3 bg-white hover:bg-slate-50 text-xs font-bold text-slate-655 border border-slate-205 rounded-xl transition shadow-3xs"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              onClick={() => handleGenerateReport(ev.title, ev.id)}
+                              className="flex-1 text-center py-2 px-3 bg-white hover:bg-indigo-50/30 text-xs font-bold text-emerald-650 border border-slate-205 rounded-xl transition shadow-3xs cursor-pointer"
+                            >
+                              Report
+                            </button>
+                            <button
+                              id={`host-share-mobile-${ev.id}`}
+                              onClick={() => {
+                                try {
+                                  const shareUrl = `${window.location.origin}/events/${ev.slug || ev.id}`;
+                                  navigator.clipboard.writeText(shareUrl);
+                                  alert('Event public share link copied to clipboard! 🚀');
+                                } catch (e) {
+                                  alert('Could not copy share link.');
+                                }
+                              }}
+                              className="flex-1 text-center py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 border border-indigo-120 rounded-xl transition cursor-pointer"
+                            >
+                              Share
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEvent(ev.id)}
+                              className="w-full text-center py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl transition cursor-pointer border border-rose-100 mt-1"
+                            >
+                              Delete Event
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

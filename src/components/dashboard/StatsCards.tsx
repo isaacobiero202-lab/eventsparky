@@ -42,7 +42,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
+      className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5"
     >
       {stats.map((stat, i) => {
         const Icon = stat.icon;
@@ -51,24 +51,24 @@ export function StatsCards({ stats }: StatsCardsProps) {
           <motion.div
             variants={itemVariants}
             key={i}
-            className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between group hover:shadow-sm hover:border-slate-300/80 transition-all duration-300"
+            className="bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 group hover:shadow-sm hover:border-slate-300/80 transition-all duration-300"
           >
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">
+            <div className="min-w-0">
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono truncate">
                 {stat.label}
               </p>
-              <h4 className="text-3xl font-bold text-slate-900 mt-1.5 font-display tracking-tight">
+              <h4 className="text-xl sm:text-3xl font-bold text-slate-900 mt-1 sm:mt-1.5 font-display tracking-tight truncate">
                 {stat.value}
               </h4>
               {stat.description && (
-                <p className="text-xs text-slate-500 mt-1 font-medium">
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 font-medium truncate">
                   {stat.description}
                 </p>
               )}
             </div>
 
-            <div className={`p-3.5 rounded-lg shrink-0 ${stat.color} text-white`}>
-              <Icon className="w-5 h-5" />
+            <div className={`p-2.5 sm:p-3.5 rounded-lg shrink-0 ${stat.color} text-white self-start sm:self-auto`}>
+              <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
           </motion.div>
         );
