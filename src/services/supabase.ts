@@ -113,6 +113,9 @@ class MockQueryBuilder {
     } else if (this.table === 'feedback') {
       const defaultFeedback: any[] = [];
       localStorage.setItem('mock_feedback', JSON.stringify(defaultFeedback));
+    } else if (this.table === 'notifications') {
+      const defaultNotifications: any[] = [];
+      localStorage.setItem('mock_notifications', JSON.stringify(defaultNotifications));
     }
   }
 
@@ -121,7 +124,43 @@ class MockQueryBuilder {
   }
 
   setData(data: any) {
-    localStorage.setItem(`mock_${this.table}`, JSON.stringify(data));
+    try {
+      localStorage.setItem(`mock_${this.table}`, JSON.stringify(data));
+    } catch (e: any) {
+      console.warn(`localStorage quota exceeded for mock_${this.table}. Pruning heavy images to recover...`);
+      try {
+        const pruned = this.pruneHeavyFields(data);
+        localStorage.setItem(`mock_${this.table}`, JSON.stringify(pruned));
+        console.info(`Successfully salvaged mock_${this.table} by pruning large assets.`);
+      } catch (innerError) {
+        console.error('Failed to write even pruned data to localStorage:', innerError);
+      }
+    }
+  }
+
+  private pruneHeavyFields(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.pruneHeavyFields(item));
+    }
+    if (typeof obj === 'object') {
+      const copy = { ...obj };
+      for (const key of Object.keys(copy)) {
+        const val = copy[key];
+        if (typeof val === 'string' && val.length > 20000) {
+          if (val.startsWith('data:image')) {
+            console.log(`Pruning heavy media field "${key}" (${Math.round(val.length / 1024)} KB) to light backdrop URL.`);
+            copy[key] = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&q=80';
+          } else {
+            copy[key] = val.slice(0, 5000) + '... [truncated large output]';
+          }
+        } else if (typeof val === 'object') {
+          copy[key] = this.pruneHeavyFields(val);
+        }
+      }
+      return copy;
+    }
+    return obj;
   }
 
   select(selectStr?: string) {
@@ -391,6 +430,7 @@ class MockSupabaseClient {
     },
     onAuthStateChange(callback: any) {
       const handler = () => {
+        if (activeClient) return; // Ignore mock event if active live client is configured
         const user = JSON.parse(localStorage.getItem('mock_user') || 'null');
         callback('SIGNED_IN', user ? { user } : null);
       };

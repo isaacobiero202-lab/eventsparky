@@ -18,23 +18,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, fallbackUser?: any) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.warn('Error fetching profile from DB:', error.message);
-        // If profile profile doesn't exist yet (db trigger lag), let's create a temporary profile state
-        // to prevent UI crash.
+      if (error || !data) {
+        if (error) {
+          console.warn('Error fetching profile from DB:', error.message);
+        }
+        const activeUser = fallbackUser || user;
         const defaultProfile: Profile = {
           id: userId,
-          email: user?.email || '',
-          full_name: user?.user_metadata?.full_name || 'New User',
-          role: (user?.user_metadata?.role as UserRole) || 'attendee',
+          email: activeUser?.email || '',
+          full_name: activeUser?.user_metadata?.full_name || 'New User',
+          role: (activeUser?.user_metadata?.role as UserRole) || 'attendee',
           avatar_url: null,
           created_at: new Date().toISOString()
         };
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchProfile(session.user.id).finally(() => setLoading(false));
+        fetchProfile(session.user.id, session.user).finally(() => setLoading(false));
       } else {
         setUser(null);
         setProfile(null);
@@ -64,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user);
-        await fetchProfile(session.user.id);
+        await fetchProfile(session.user.id, session.user);
       } else {
         setUser(null);
         setProfile(null);

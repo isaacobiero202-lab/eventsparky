@@ -1,13 +1,12 @@
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-### EventSpark System Description
+# Run and deploy your AI Studio app
 
-**EventSpark** is a web-based Event Management System designed to simplify and automate the planning, organization, and management of events. The system provides a centralized platform where administrators can create, manage, and monitor events, while users can register, view event details, purchase tickets, and receive event updates.
+This contains everything you need to run your app locally.
 
-The system aims to improve efficiency, reduce manual work, and enhance communication between event organizers and attendees. EventSpark supports various event types such as conferences, seminars, workshops, festivals, corporate events, educational events, and social gatherings.
-
-The platform includes features such as user registration and authentication, event creation and scheduling, attendee registration, ticket management, payment integration, report generation, and event tracking. Administrators have full control over event records and user management, while users can easily access event information and manage their registrations through a user-friendly interface.
-
-Built using modern web technologies, EventSpark ensures secure data management, accessibility, and scalability. The system helps organizations and individuals streamline event operations, improve attendee engagement, and deliver successful events with greater convenience and reliability.
+View your app in AI Studio: https://ai.studio/apps/d4e981d1-612c-4c7f-bd44-7cf0f32ef7da
 
 ## Run Locally
 

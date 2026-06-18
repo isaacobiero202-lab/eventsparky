@@ -23,7 +23,7 @@ export function useRegistrations() {
       // 1. Fetch event capacity details and active registrations
       const { data: event, error: eventErr } = await supabase
         .from('events')
-        .select('capacity, registrations(id, status)')
+        .select('title, organizer_id, capacity, registrations(id, status)')
         .eq('id', eventId)
         .single();
 
@@ -79,6 +79,51 @@ export function useRegistrations() {
           throw new Error('You are already registered for this event.');
         }
         throw regErr;
+      }
+
+      // Generate instant organizer notification
+      try {
+        const { data: orgProfile } = await supabase
+          .from('profiles')
+          .select('email, full_name')
+          .eq('id', event.organizer_id)
+          .single();
+
+        const organizerEmail = orgProfile?.email || 'organizer@eventspark.com';
+
+        const newNotif = {
+          id: crypto.randomUUID ? crypto.randomUUID() : 'notif-' + Math.random().toString(36).slice(2, 11),
+          user_id: event.organizer_id,
+          type: 'organizer_booking',
+          title: 'New Ticket Booking! 🎟️',
+          message: `${profile.full_name} has successfully registered a ticket for "${event.title}".`,
+          event_id: eventId,
+          is_read: false,
+          created_at: new Date().toISOString(),
+          metadata: {
+            attendee_name: profile.full_name,
+            event_name: event.title,
+            tickets_count: 1,
+            booking_time: new Date().toLocaleString(),
+            recipient_email: organizerEmail
+          }
+        };
+
+        // Insert into DB
+        await supabase.from('notifications').insert(newNotif);
+
+        // Broadcast real-time SSE notification
+        const emailPref = localStorage.getItem('event-spark-email-notifications') !== 'false';
+        await fetch('/api/notifications/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...newNotif,
+            emailEnabled: emailPref
+          })
+        });
+      } catch (notifErr: any) {
+        console.warn('Failed to send real-time notification to organizer:', notifErr.message);
       }
 
       return true;

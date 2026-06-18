@@ -4,6 +4,7 @@ import { Event } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { formatDate, formatPrice } from '../../utils/formatDate';
 import { Calendar, MapPin, Users, Flame, Edit, Trash2 } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface EventCardProps {
   event: Event;
@@ -25,7 +26,20 @@ export function EventCard({ event, onDelete }: EventCardProps) {
   const bannerImage = event.image_url || 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
 
   return (
-    <div className="bg-white rounded-xl overflow-hidden border border-slate-200/90 shadow-2xs hover:shadow-sm hover:border-slate-300 transition-all duration-300 flex flex-col h-full group">
+    <motion.div
+      whileHover={{ 
+        y: -4,
+        scale: 1.015,
+        boxShadow: "0 10px 20px -6px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.03)",
+        borderColor: "rgba(203, 213, 225, 0.95)"
+      }}
+      transition={{ 
+        type: "spring", 
+        stiffness: 400, 
+        damping: 25 
+      }}
+      className="bg-white rounded-xl overflow-hidden border border-slate-200/90 shadow-2xs flex flex-col h-full group"
+    >
       {/* Event Banner */}
       <div className="relative h-48 overflow-hidden bg-slate-100">
         <img
@@ -137,6 +151,6 @@ export function EventCard({ event, onDelete }: EventCardProps) {
           </Link>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

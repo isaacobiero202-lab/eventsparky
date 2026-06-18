@@ -142,6 +142,53 @@ export function useEvents() {
         .single();
 
       if (createErr) throw createErr;
+
+      // Notify all registered attendees of the brand-new event
+      try {
+        const { data: attendees } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .eq('role', 'attendee');
+
+        if (attendees && attendees.length > 0) {
+          for (const attendee of attendees) {
+            const attendeeNotif = {
+              id: crypto.randomUUID ? crypto.randomUUID() : 'notif-' + Math.random().toString(36).slice(2, 11),
+              user_id: attendee.id,
+              type: 'attendee_new_event',
+              title: 'New Event Published! 🎉',
+              message: `"${data.title}" has been published by ${profile.full_name || 'an Organizer'}. Check out the details page to register!`,
+              event_id: data.id,
+              is_read: false,
+              created_at: new Date().toISOString(),
+              metadata: {
+                event_title: data.title,
+                event_date: data.event_date,
+                venue: data.location,
+                description: data.description ? data.description.slice(0, 150) + '...' : '',
+                recipient_email: attendee.email
+              }
+            };
+
+            // Store in DB
+            await supabase.from('notifications').insert(attendeeNotif).catch(() => {});
+
+            // Broadcast inside the server SSE stream
+            const emailPref = localStorage.getItem('event-spark-email-notifications') !== 'false';
+            await fetch('/api/notifications/emit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...attendeeNotif,
+                emailEnabled: emailPref
+              })
+            }).catch(() => {});
+          }
+        }
+      } catch (notifErr: any) {
+        console.warn('Could not launch attendee event notifications stream:', notifErr.message);
+      }
+
       return data;
     } catch (err: any) {
       console.error('Error creating event:', err.message);
@@ -235,7 +282,7 @@ export function useEvents() {
 
       // If bucket is missing or rules are not set up, try creating the bucket first and retrying
       if (uploadRes.error && (uploadRes.error.message?.includes('not found') || uploadRes.error.message?.includes('Bucket'))) {
-        console.warn('Bucket "event-posters" not found. Attempting auto-creation...');
+        console.info('Bucket "event-posters" not found. Attempting auto-creation...');
         try {
           await supabase.storage.createBucket('event-posters', { public: true });
           // Retry
@@ -243,12 +290,12 @@ export function useEvents() {
             .from('event-posters')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
         } catch (createErr) {
-          console.warn('Could not auto-create "event-posters" bucket:', createErr);
+          console.info('Could not auto-create "event-posters" bucket:', createErr);
         }
       }
 
       if (uploadRes.error) {
-        console.warn('Storage upload error, falling back to Base64:', uploadRes.error.message);
+        console.info('Storage upload error, falling back to Base64:', uploadRes.error.message);
         const base64Data = await readFileAsDataURL(file);
         return base64Data;
       }
@@ -290,7 +337,7 @@ export function useEvents() {
 
       // If bucket is missing, try creating it and retrying
       if (uploadRes.error && (uploadRes.error.message?.includes('not found') || uploadRes.error.message?.includes('Bucket'))) {
-        console.warn('Bucket "avatars" not found. Attempting auto-creation...');
+        console.info('Bucket "avatars" not found. Attempting auto-creation...');
         try {
           await supabase.storage.createBucket('avatars', { public: true });
           // Retry
@@ -298,12 +345,12 @@ export function useEvents() {
             .from('avatars')
             .upload(filePath, file, { cacheControl: '3600', upsert: true });
         } catch (createErr) {
-          console.warn('Could not auto-create "avatars" bucket:', createErr);
+          console.info('Could not auto-create "avatars" bucket:', createErr);
         }
       }
 
       if (uploadRes.error) {
-        console.warn('Storage upload error, falling back to Base64:', uploadRes.error.message);
+        console.info('Storage upload error, falling back to Base64:', uploadRes.error.message);
         const base64Data = await readFileAsDataURL(file);
         return base64Data;
       }

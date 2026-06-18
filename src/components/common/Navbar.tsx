@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { NotificationDropdown } from './NotificationDropdown';
 import { 
   Sparkles, 
   Calendar, 
@@ -104,6 +105,11 @@ export function Navbar() {
                   </Link>
                 )}
 
+                {/* Real-time Notifications Bell Dropdown */}
+                <div className="flex items-center px-1">
+                  <NotificationDropdown />
+                </div>
+
                 {/* Common Profile link */}
                 <Link to="/profile" className={linkClass('/profile')}>
                   {profile.avatar_url ? (
@@ -148,6 +154,11 @@ export function Navbar() {
 
           {/* Mobile Hamburger */}
           <div className="flex items-center md:hidden space-x-2">
+            {profile && (
+              <div className="mr-1">
+                <NotificationDropdown />
+              </div>
+            )}
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-slate-500 hover:bg-slate-100"
