@@ -35,7 +35,7 @@ import { generateICSFile } from '../utils/icsGenerator';
 export function EventDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const { getEventById, loading: eventLoading } = useEvents();
   const { 
     registerForEvent, 
@@ -128,6 +128,11 @@ export function EventDetails() {
   const handleRegister = async () => {
     if (!profile) {
       navigate('/login', { state: { from: { pathname: `/events/${id}` } } });
+      return;
+    }
+
+    if (event && profile && profile.id === event.organizer_id) {
+      setErrorMsg('As the host of this event, you cannot register to book a seat.');
       return;
     }
 
@@ -296,6 +301,54 @@ export function EventDetails() {
       setChatLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="py-20 bg-slate-50 min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="large" />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center py-20 px-4">
+        <div id="auth-gate-card" className="max-w-md w-full bg-white rounded-3xl border border-slate-100 shadow-xl p-8 text-center space-y-6">
+          <div className="mx-auto w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Access Restricted</h2>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              This event's scheduling details, maps, agenda outlines, and seat reservations are protected. You need to sign in to access this information.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Link
+              id="auth-gate-login"
+              to="/login"
+              state={{ from: { pathname: `/events/${id}` } }}
+              className="flex-1 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-indigo-700 transition duration-200 text-center"
+            >
+              Log In to Account
+            </Link>
+            <Link
+              id="auth-gate-register"
+              to="/register"
+              className="flex-1 px-5 py-3 bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold transition duration-200 text-center"
+            >
+              Create Account
+            </Link>
+          </div>
+          <div className="pt-2 border-t border-slate-100">
+            <Link to="/events" className="text-xs text-indigo-600 hover:underline font-semibold">
+              ← Return to public events feed
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (generalLoading && !event) {
     return (
@@ -557,7 +610,17 @@ export function EventDetails() {
               </div>
             )}
 
-            {isRegistered ? (
+            {profile && profile.id === event.organizer_id ? (
+              <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl text-indigo-900 flex flex-col items-center space-y-3">
+                <ShieldAlert className="w-8 h-8 text-indigo-600 shrink-0" />
+                <div>
+                  <h4 className="font-extrabold text-xs text-center leading-normal">Event Host Mode</h4>
+                  <p className="text-[10px] text-indigo-650 mt-1 font-semibold leading-relaxed">
+                    You are the organizer/host of this event. Spot bookings are limited to public attendees since your host seat is preserved.
+                  </p>
+                </div>
+              </div>
+            ) : isRegistered ? (
               <div className="space-y-3 p-4 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl flex flex-col items-center">
                 <CheckCircle className="w-10 h-10 text-emerald-600 animate-bounce" />
                 <div>

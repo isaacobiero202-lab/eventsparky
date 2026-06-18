@@ -152,7 +152,7 @@ export function Register() {
                     }`}
                   >
                     <Shield className="w-5 h-5 mb-1" />
-                    <span className="text-xs font-bold">Organizer</span>
+                    <span className="text-xs font-bold">Host</span>
                     <span className="text-[10px] text-slate-400 mt-0.5 font-normal">Create & Manage</span>
                   </button>
                 </div>
@@ -166,7 +166,7 @@ export function Register() {
                 {loading ? (
                   <>
                     <Loader className="w-4 h-4 animate-spin" />
-                    <span>Spinning up account...</span>
+                    <span>Processing account...</span>
                   </>
                 ) : (
                   <span>Register Account</span>
@@ -180,7 +180,7 @@ export function Register() {
           <p className="text-xs text-slate-500 font-medium">
             Already have an Event Spark account?{' '}
             <Link to="/login" className="text-indigo-600 font-bold hover:underline">
-              Sign In Instead
+              Login Instead
             </Link>
           </p>
         </div>
