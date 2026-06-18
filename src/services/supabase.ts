@@ -284,7 +284,30 @@ class MockQueryBuilder {
         data = data.map((evt: any) => {
           const organizer = profilesList.find((p: any) => p.id === evt.organizer_id) || null;
           const regsForThisEvent = registrationsList.filter((r: any) => r.event_id === evt.id) || [];
+          
+          // Enrich with standard premium defaults if missing
           return {
+            status: 'published',
+            views: Math.floor(Math.abs(evt.id ? evt.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 100) % 900 + 150 : 250)),
+            is_template: false,
+            agenda: JSON.stringify([
+              { time: "09:00 AM - 10:00 AM", session: "Registration & Morning Tea", detail: "Pick up your event badge, collect standard welcome packs, and enjoy light refreshments while networking." },
+              { time: "10:00 AM - 11:30 AM", session: "Opening Keynote Address", detail: "A deep dive into industry trends, technological breakthroughs, and future landscape projections." },
+              { time: "11:30 AM - 01:00 PM", session: "Interactive Panel Breakout", detail: "Fireside discussion with veteran leaders followed by dynamic audience Q&A sessions." },
+              { time: "01:00 PM - 02:00 PM", session: "Networking Luncheon", detail: "A fully catered warm lunch inside the main gallery. Connect with fellow industry specialists." },
+              { time: "02:00 PM - 04:00 PM", session: "Hands-on Practical Lab Sessions", detail: "Collaborative building workshops. Group teams will prototype actionable concepts in real-time." },
+              { time: "04:00 PM - 05:00 PM", session: "Closing Remarks & Drinks Mixer", detail: "Summary of insights, partner announcements, and ambient live performance networking." }
+            ]),
+            speakers: JSON.stringify([
+              { name: "Sarah Jenkins", role: "Principal Strategist", company: "Aether Labs", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&q=80", bio: "With over 12 years in system architecture design, Sarah leads deep tech exploratory initiatives globally." },
+              { name: "Dr. Marcus Vance", role: "Head of Research & Development", company: "Sovereign AI", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80", bio: "Marcus researches cognitive models, agent protocols, and multi-threaded reactive neural pipelines." }
+            ]),
+            faqs: JSON.stringify([
+              { q: "Is lunch provided?", a: "Yes, standard warm options, plus vegan, gluten-free, and halal catering sets are provided in the main mezzanine." },
+              { q: "Can I receive a booking refund?", a: "Refunds/cancellation can be processed through your Attendee Dashboard up to 24 hours before event commencement." },
+              { q: "Should I bring a printed ticket?", a: "Digital tickets containing your unique QR Code and Reservation Badge under 'My Registrations' can be scanned on your mobile." }
+            ]),
+            policies: "1. Respectful Conduct: All attendees must maintain professional, respectful decorum. Harassment of any kind will result in immediate escorting off the venue without ticketing refund.\n2. Audio Recording Policy: Professional video capture rigs are restricted. Standard phone photography and short live sharing clips are highly encouraged.\n3. Ticket Ownership: Tickets can be re-transferred or updated from your account dashboard free of charge.",
             ...evt,
             organizer,
             registrations: regsForThisEvent

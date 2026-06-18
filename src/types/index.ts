@@ -20,6 +20,13 @@ export interface Event {
   image_url: string | null;
   organizer_id: string | null;
   created_at: string;
+  status?: 'draft' | 'published' | 'ongoing' | 'completed' | 'cancelled';
+  agenda?: string;
+  speakers?: string;
+  faqs?: string;
+  policies?: string;
+  views?: number;
+  is_template?: boolean;
   // Joined fields for organizers
   organizer?: Profile;
   // Extra client metrics
