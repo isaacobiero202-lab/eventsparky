@@ -230,8 +230,8 @@ export function EventDetails() {
       generateICSFile({
         title: event.title,
         description: event.description || '',
-        event_date: event.event_date,
-        location: event.location,
+        startDate: event.event_date || new Date().toISOString(),
+        location: event.location || 'TBD',
       });
     } catch (err) {
       console.error(err);
@@ -247,8 +247,7 @@ export function EventDetails() {
     try {
       const generated = await geminiService.generateAgenda({
         title: event.title,
-        description: event.description || '',
-        date: event.event_date,
+        durationHours: 4,
       });
       setAgenda(generated);
     } catch (err: any) {

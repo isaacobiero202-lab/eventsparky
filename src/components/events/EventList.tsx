@@ -63,17 +63,18 @@ export function EventList() {
   const [upcomingOnly, setUpcomingOnly] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'calendar'>('grid');
 
-  const loadEvents = async () => {
+  const loadEvents = async (forceRefresh?: boolean) => {
     const list = await getEvents({
       search: search.trim() || undefined,
       upcomingOnly: upcomingOnly,
+      forceRefresh,
     });
     setEvents(list);
   };
 
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
-      loadEvents();
+      loadEvents(false);
     }, 250);
 
     return () => clearTimeout(delayDebounce);
@@ -107,7 +108,7 @@ export function EventList() {
 
   // Client side multi-axis Smart Filter and Advanced Search
   const filteredAndSortedEvents = useMemo(() => {
-    let result = [...events];
+    let result = events.filter(ev => !ev.is_cancelled);
 
     // 1. Advanced Search processing
     if (search.trim()) {
@@ -234,7 +235,17 @@ export function EventList() {
           </div>
 
           {/* Action Row */}
-          <div className="flex flex-wrap items-center gap-2shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Quick manual refresh button */}
+            <button
+              onClick={() => loadEvents(true)}
+              className="flex items-center space-x-1.5 px-3.5 py-3 rounded-xl border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 font-bold text-xs transition cursor-pointer"
+              title="Force refresh events"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+
             {/* Sliding advanced filters toggle */}
             <button
               onClick={() => setShowFilters(!showFilters)}

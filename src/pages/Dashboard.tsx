@@ -21,7 +21,8 @@ import {
   BadgeHelp,
   BarChart2,
   DollarSign,
-  Clock
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 
 export function Dashboard() {
@@ -33,7 +34,7 @@ export function Dashboard() {
   const [orgEvents, setOrgEvents] = useState<any[]>([]);
   const [attRegistrations, setAttRegistrations] = useState<any[]>([]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (forceRefresh?: boolean) => {
     if (!profile) return;
 
     if (profile.role === 'admin') {
@@ -42,16 +43,16 @@ export function Dashboard() {
     }
 
     if (profile.role === 'organizer') {
-      const list = await getEvents({ organizerId: profile.id });
+      const list = await getEvents({ organizerId: profile.id, forceRefresh });
       setOrgEvents(list);
     } else if (profile.role === 'attendee') {
-      const list = await getRegistrationsByUser(profile.id);
+      const list = await getRegistrationsByUser(profile.id, forceRefresh);
       setAttRegistrations(list);
     }
   };
 
   useEffect(() => {
-    loadDashboardData();
+    loadDashboardData(false);
   }, [profile]);
 
   const handleCancel = async (regId: string) => {
@@ -129,8 +130,8 @@ export function Dashboard() {
 
   // Calculate statistics for Organizer Profile
   const totalEvents = orgEvents.length;
-  const activeEvents = orgEvents.filter(e => e.status !== 'cancelled' && e.status !== 'draft').length;
-  const draftEvents = orgEvents.filter(e => e.status === 'draft').length;
+  const activeEvents = orgEvents.filter(e => !e.is_cancelled).length;
+  const draftEvents = orgEvents.filter(e => e.is_cancelled).length;
   const totalTicketsSold = orgEvents.reduce((acc, curr) => acc + (curr.registration_count || 0), 0);
   const revenueGenerated = orgEvents.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.registration_count || 0)), 0);
   const upcomingEvents = orgEvents.filter(e => e.event_date && new Date(e.event_date) >= new Date()).length;
@@ -275,6 +276,16 @@ export function Dashboard() {
           </div>
 
           <div className="shrink-0 flex flex-wrap gap-3">
+            <button
+              onClick={() => loadDashboardData(true)}
+              disabled={eventsLoading || regLoading}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white/10 text-white border border-white/20 rounded-xl font-bold text-xs hover:bg-white/20 transition shadow-xs cursor-pointer disabled:opacity-50"
+              title="Refresh Dashboard Data"
+            >
+              <RefreshCw className={`w-4 h-4 text-emerald-300 ${eventsLoading || regLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+
             {profile.role === 'organizer' && (
               <Link
                 to="/create-event"

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { Event } from '../types';
 import { useAuth } from './useAuth';
+import { queryCache } from '../services/supabaseCache';
 
 /**
  * Custom hook for managing event-related actions in Supabase.
@@ -20,7 +21,16 @@ export function useEvents() {
     search?: string;
     upcomingOnly?: boolean;
     organizerId?: string;
+    forceRefresh?: boolean;
   }) => {
+    const { forceRefresh, ...queryOptions } = options || {};
+    const cacheKey = queryCache.generateKey('events:list', queryOptions);
+
+    if (!forceRefresh) {
+      const cached = queryCache.get<Event[]>(cacheKey);
+      if (cached) return cached;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -32,15 +42,15 @@ export function useEvents() {
           registrations(id, status)
         `);
 
-      if (options?.search) {
-        query = query.or(`title.ilike.%${options.search}%,description.ilike.%${options.search}%,location.ilike.%${options.search}%`);
+      if (queryOptions?.search) {
+        query = query.or(`title.ilike.%${queryOptions.search}%,description.ilike.%${queryOptions.search}%,location.ilike.%${queryOptions.search}%`);
       }
 
-      if (options?.organizerId) {
-        query = query.eq('organizer_id', options.organizerId);
+      if (queryOptions?.organizerId) {
+        query = query.eq('organizer_id', queryOptions.organizerId);
       }
 
-      if (options?.upcomingOnly) {
+      if (queryOptions?.upcomingOnly) {
         // filter events from today onwards
         const today = new Date().toISOString();
         query = query.gte('event_date', today);
@@ -52,8 +62,10 @@ export function useEvents() {
       if (fetchErr) throw fetchErr;
 
       // Map registrations count nicely
+      const localCancelledList = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('eventspark_cancelled_events') || '{}') : {};
       const mappedEvents: Event[] = (data || []).map((item: any) => {
         const activeRegistrations = item.registrations?.filter((r: any) => r.status === 'registered') || [];
+        const isCancelled = !!localCancelledList[item.id] || item.is_cancelled === true || item.status === 'cancelled';
         return {
           id: item.id,
           title: item.title,
@@ -66,10 +78,13 @@ export function useEvents() {
           organizer_id: item.organizer_id,
           created_at: item.created_at,
           organizer: item.organizer,
+          is_cancelled: isCancelled,
+          status: isCancelled ? 'cancelled' : 'published',
           registration_count: activeRegistrations.length
         };
       });
 
+      queryCache.set(cacheKey, mappedEvents);
       return mappedEvents;
     } catch (err: any) {
       console.error('Error fetching events:', err.message);
@@ -83,7 +98,13 @@ export function useEvents() {
   /**
    * Fetches full event details for a single event by ID, including its registration count
    */
-  const getEventById = useCallback(async (id: string): Promise<Event | null> => {
+  const getEventById = useCallback(async (id: string, forceRefresh?: boolean): Promise<Event | null> => {
+    const cacheKey = `events:id:${id}`;
+    if (!forceRefresh) {
+      const cached = queryCache.get<Event | null>(cacheKey);
+      if (cached !== null && cached !== undefined) return cached;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -101,7 +122,10 @@ export function useEvents() {
 
       const activeRegistrations = data.registrations?.filter((r: any) => r.status === 'registered') || [];
 
-      return {
+      const localCancelledList = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('eventspark_cancelled_events') || '{}') : {};
+      const isCancelled = !!localCancelledList[data.id] || data.is_cancelled === true || data.status === 'cancelled';
+
+      const eventDetails: Event = {
         id: data.id,
         title: data.title,
         description: data.description,
@@ -113,8 +137,13 @@ export function useEvents() {
         organizer_id: data.organizer_id,
         created_at: data.created_at,
         organizer: data.organizer,
+        is_cancelled: isCancelled,
+        status: isCancelled ? 'cancelled' : 'published',
         registration_count: activeRegistrations.length
       };
+
+      queryCache.set(cacheKey, eventDetails);
+      return eventDetails;
     } catch (err: any) {
       console.error('Error fetching event details:', err.message);
       setError(err.message);
@@ -255,6 +284,7 @@ export function useEvents() {
         console.warn('Could not launch attendee event notifications stream:', notifErr.message);
       }
 
+      queryCache.invalidate('events:');
       return data;
     } catch (err: any) {
       console.error('Error creating event:', err.message);
@@ -275,14 +305,50 @@ export function useEvents() {
       // Remove joined fields if passed
       const { organizer, registration_count, ...payload } = eventData as any;
 
-      const { data, error: updateErr } = await supabase
-        .from('events')
-        .update(payload)
-        .eq('id', eventId)
-        .select()
-        .single();
+      // Intercept is_cancelled / status and handle in localStorage fallback
+      const localCancelledList = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('eventspark_cancelled_events') || '{}') : {};
+      let localUpdated = false;
 
-      if (updateErr) throw updateErr;
+      if ('is_cancelled' in payload) {
+        localCancelledList[eventId] = !!payload.is_cancelled;
+        localUpdated = true;
+        delete payload.is_cancelled;
+      }
+      if ('status' in payload) {
+        localCancelledList[eventId] = payload.status === 'cancelled';
+        localUpdated = true;
+        delete payload.status;
+      }
+
+      if (localUpdated && typeof window !== 'undefined') {
+        localStorage.setItem('eventspark_cancelled_events', JSON.stringify(localCancelledList));
+      }
+
+      let data: any = null;
+      if (Object.keys(payload).length > 0) {
+        const { data: updateData, error: updateErr } = await supabase
+          .from('events')
+          .update(payload)
+          .eq('id', eventId)
+          .select()
+          .single();
+
+        if (updateErr) {
+          console.warn('Database update error, using local updates only:', updateErr.message);
+        } else {
+          data = updateData;
+        }
+      }
+
+      // If payload only was is_cancelled, or supabase failed but local succeeded, construct a partial return
+      if (!data) {
+        const { data: existing } = await supabase
+          .from('events')
+          .select('*')
+          .eq('id', eventId)
+          .maybeSingle();
+        data = existing || { id: eventId, ...payload };
+      }
 
       // Log update action
       try {
@@ -313,6 +379,7 @@ export function useEvents() {
         console.warn('Failed to log event update:', logErr);
       }
 
+      queryCache.invalidate('events:');
       return data;
     } catch (err: any) {
       console.error('Error updating event:', err.message);
@@ -380,6 +447,7 @@ export function useEvents() {
         console.warn('Failed to log event deletion:', logErr);
       }
 
+      queryCache.invalidate('events:');
       return true;
     } catch (err: any) {
       console.error('Error deleting event:', err.message);

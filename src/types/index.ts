@@ -27,6 +27,7 @@ export interface Event {
   policies?: string;
   views?: number;
   is_template?: boolean;
+  is_cancelled?: boolean;
   // Joined fields for organizers
   organizer?: Profile;
   // Extra client metrics

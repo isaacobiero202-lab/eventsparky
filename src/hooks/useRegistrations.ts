@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { Registration, Feedback } from '../types';
 import { useAuth } from './useAuth';
+import { queryCache } from '../services/supabaseCache';
 
 /**
  * Custom hook for managing event registrations and feedback / reviews.
@@ -183,6 +184,8 @@ export function useRegistrations() {
         console.warn('Failed to send real-time notification to organizer:', notifErr.message);
       }
 
+      queryCache.invalidate('registrations:');
+      queryCache.invalidate('events:');
       return true;
     } catch (err: any) {
       console.error('Registration failed:', err.message);
@@ -206,6 +209,8 @@ export function useRegistrations() {
         .eq('id', registrationId);
 
       if (cancelErr) throw cancelErr;
+      queryCache.invalidate('registrations:');
+      queryCache.invalidate('events:');
       return true;
     } catch (err: any) {
       console.error('Cancel registration failed:', err.message);
@@ -219,7 +224,13 @@ export function useRegistrations() {
   /**
    * Checks if the active user is registered for a specific event
    */
-  const checkUserRegistration = useCallback(async (eventId: string, userId: string): Promise<Registration | null> => {
+  const checkUserRegistration = useCallback(async (eventId: string, userId: string, forceRefresh?: boolean): Promise<Registration | null> => {
+    const cacheKey = `registrations:check:${eventId}:${userId}`;
+    if (!forceRefresh) {
+      const cached = queryCache.get<Registration | null>(cacheKey);
+      if (cached !== null && cached !== undefined) return cached;
+    }
+
     try {
       const { data, error: checkErr } = await supabase
         .from('registrations')
@@ -230,6 +241,7 @@ export function useRegistrations() {
         .maybeSingle();
 
       if (checkErr) return null;
+      queryCache.set(cacheKey, data as Registration);
       return data as Registration;
     } catch {
       return null;
@@ -239,7 +251,13 @@ export function useRegistrations() {
   /**
    * Fetches registrations belonging to a specific user id
    */
-  const getRegistrationsByUser = useCallback(async (userId: string): Promise<Registration[]> => {
+  const getRegistrationsByUser = useCallback(async (userId: string, forceRefresh?: boolean): Promise<Registration[]> => {
+    const cacheKey = `registrations:user:${userId}`;
+    if (!forceRefresh) {
+      const cached = queryCache.get<Registration[]>(cacheKey);
+      if (cached) return cached;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -253,7 +271,9 @@ export function useRegistrations() {
         .order('registered_at', { ascending: false });
 
       if (fetchErr) throw fetchErr;
-      return (data || []) as Registration[];
+      const result = (data || []) as Registration[];
+      queryCache.set(cacheKey, result);
+      return result;
     } catch (err: any) {
       console.error('Fetch user registrations error:', err.message);
       setError(err.message);
@@ -266,7 +286,13 @@ export function useRegistrations() {
   /**
    * Fetches registrations registered to a specific event
    */
-  const getRegistrationsByEvent = useCallback(async (eventId: string): Promise<Registration[]> => {
+  const getRegistrationsByEvent = useCallback(async (eventId: string, forceRefresh?: boolean): Promise<Registration[]> => {
+    const cacheKey = `registrations:event:${eventId}`;
+    if (!forceRefresh) {
+      const cached = queryCache.get<Registration[]>(cacheKey);
+      if (cached) return cached;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -279,7 +305,9 @@ export function useRegistrations() {
         .eq('event_id', eventId);
 
       if (fetchErr) throw fetchErr;
-      return (data || []) as Registration[];
+      const result = (data || []) as Registration[];
+      queryCache.set(cacheKey, result);
+      return result;
     } catch (err: any) {
       console.error('Fetch event registrations error:', err.message);
       setError(err.message);
@@ -309,6 +337,7 @@ export function useRegistrations() {
         .single();
 
       if (feedErr) throw feedErr;
+      queryCache.invalidate('feedback:');
       return data as Feedback;
     } catch (err: any) {
       console.error('Leave review failed:', err.message);
@@ -322,7 +351,13 @@ export function useRegistrations() {
   /**
    * Fetches reviews/feedback left on a specific event
    */
-  const getFeedbackByEvent = useCallback(async (eventId: string): Promise<Feedback[]> => {
+  const getFeedbackByEvent = useCallback(async (eventId: string, forceRefresh?: boolean): Promise<Feedback[]> => {
+    const cacheKey = `feedback:event:${eventId}`;
+    if (!forceRefresh) {
+      const cached = queryCache.get<Feedback[]>(cacheKey);
+      if (cached) return cached;
+    }
+
     try {
       const { data, error: feedErr } = await supabase
         .from('feedback')
@@ -334,7 +369,9 @@ export function useRegistrations() {
         .order('created_at', { ascending: false });
 
       if (feedErr) throw feedErr;
-      return (data || []) as Feedback[];
+      const result = (data || []) as Feedback[];
+      queryCache.set(cacheKey, result);
+      return result;
     } catch (err: any) {
       console.error('Fetch feedback exception:', err.message);
       return [];

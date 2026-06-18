@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { useAuth } from './useAuth';
+import { queryCache } from '../services/supabaseCache';
 
 export interface Notification {
   id: string;
@@ -201,6 +202,9 @@ export function useNotifications() {
         if (data.type === 'connected') return;
 
         console.log('Real-time notification socket event received:', data);
+        
+        // Invalidate query caching layer upon receipt of any realtime update message
+        queryCache.clear();
         
         // Check if recipient matches or matches everyone (broadcast for attendee)
         if (data.user_id === profile.id) {

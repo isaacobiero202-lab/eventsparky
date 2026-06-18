@@ -17,8 +17,7 @@ export function AdminAnalytics() {
   const [regCount, setRegCount] = useState(0);
 
   // Chart structures
-  const [registrationTrend, setRegistrationTrend] = useState<{ date: string; count: number }[]>([]);
-  const [popularEvents, setPopularEvents] = useState<{ name: string; count: number }[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
 
   const loadAdminMetrics = async () => {
     setLoading(true);
@@ -40,66 +39,25 @@ export function AdminAnalytics() {
       setRegCount(regsRes.count || 0);
 
       // 2. Fetch popular events (events joined with registrations)
-      const { data: popularData, error: popErr } = await supabase
+      const { data: eventsData, error: eventsErr } = await supabase
         .from('events')
         .select(`
-          id,
-          title,
+          *,
           registrations(id, status)
         `);
 
-      if (popErr) throw popErr;
+      if (eventsErr) throw eventsErr;
 
-      const formattedPopular = (popularData || [])
-        .map((ev: any) => {
-          const activeRegs = ev.registrations?.filter((r: any) => r.status === 'registered') || [];
-          return {
-            name: ev.title,
-            count: activeRegs.length,
-          };
-        })
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5); // top 5 only
-
-      setPopularEvents(formattedPopular);
-
-      // 3. Fetch registration trend for last 7 days
-      const { data: trendData, error: trendErr } = await supabase
-        .from('registrations')
-        .select('registered_at, status')
-        .eq('status', 'registered')
-        .order('registered_at', { ascending: true });
-
-      if (trendErr) throw trendErr;
-
-      // Group by daily dates (last 7 days list)
-      const dailyMap: Record<string, number> = {};
-      const today = new Date();
-      
-      // Initialize daily keys in map for last 7 days
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(today.getDate() - i);
-        const dateKey = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        dailyMap[dateKey] = 0;
-      }
-
-      // Populate daily keys
-      (trendData || []).forEach((r: any) => {
-        if (!r.registered_at) return;
-        const d = new Date(r.registered_at);
-        const dateKey = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        if (dateKey in dailyMap) {
-          dailyMap[dateKey] += 1;
-        }
+      const mappedEvents = (eventsData || []).map((ev: any) => {
+        const activeRegs = ev.registrations?.filter((r: any) => r.status === 'registered') || [];
+        return {
+          ...ev,
+          registration_count: activeRegs.length,
+          price: ev.price ? parseFloat(ev.price) : 0,
+        };
       });
 
-      const formattedTrend = Object.keys(dailyMap).map((key) => ({
-        date: key,
-        count: dailyMap[key],
-      }));
-
-      setRegistrationTrend(formattedTrend);
+      setEvents(mappedEvents);
 
     } catch (err: any) {
       console.error('Error loading admin analytics:', err);
@@ -185,8 +143,7 @@ export function AdminAnalytics() {
 
           {/* CHARTS CONTAINER */}
           <ChartSection
-            registrationTrendData={registrationTrend}
-            popularEventsData={popularEvents}
+            events={events}
           />
         </>
       )}

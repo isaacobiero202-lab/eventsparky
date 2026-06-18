@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { Profile, UserRole, AuthState } from '../types';
 
@@ -18,6 +18,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Avoid stale closures in useEffect auth subscription listener
+  const userRef = useRef<any>(null);
+  userRef.current = user;
+  const profileRef = useRef<Profile | null>(null);
+  profileRef.current = profile;
+
   const fetchProfile = async (userId: string, fallbackUser?: any) => {
     try {
       const { data, error } = await supabase
@@ -30,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) {
           console.warn('Error fetching profile from DB:', error.message);
         }
-        const activeUser = fallbackUser || user;
+        const activeUser = fallbackUser || userRef.current;
         const defaultProfile: Profile = {
           id: userId,
           email: activeUser?.email || '',
@@ -64,7 +70,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 2. Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
+        const isTokenRefreshed = event === 'TOKEN_REFRESHED';
+        const isSameUser = userRef.current && userRef.current.id === session.user.id;
+        
         setUser(session.user);
+        
+        if (isTokenRefreshed && isSameUser && profileRef.current) {
+          // Skip redundant profile fetch on token refresh since user is the same
+          setLoading(false);
+          return;
+        }
+
         await fetchProfile(session.user.id, session.user);
       } else {
         setUser(null);

@@ -23,7 +23,8 @@ import {
   Ticket,
   X,
   Share2,
-  Heart
+  Heart,
+  RefreshCw
 } from 'lucide-react';
 
 export function MyRegistrations() {
@@ -53,12 +54,12 @@ export function MyRegistrations() {
   const [savedEventIds, setSavedEventIds] = useState<string[]>([]);
 
   // Load complete state data
-  const loadRegsAndEvents = async () => {
+  const loadRegsAndEvents = async (forceRefresh?: boolean) => {
     if (!profile) return;
     try {
       const [regList, eventList] = await Promise.all([
-        getRegistrationsByUser(profile.id),
-        getEvents()
+        getRegistrationsByUser(profile.id, forceRefresh),
+        getEvents({ forceRefresh })
       ]);
       setRegistrations(regList);
       setAllEvents(eventList);
@@ -74,7 +75,7 @@ export function MyRegistrations() {
   };
 
   useEffect(() => {
-    loadRegsAndEvents();
+    loadRegsAndEvents(false);
   }, [profile]);
 
   // Cancel action implementation
@@ -258,8 +259,18 @@ Sparky Platforms Inc. (C) 2026
           </p>
         </div>
 
-        {/* Outer segmented view state togglers */}
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+        {/* Outer segmented view state togglers with Refresh */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => loadRegsAndEvents(true)}
+            disabled={loading}
+            className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-indigo-600 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Force refresh registrations list"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
           <button
             onClick={() => setActiveSegmentTab('upcoming')}
             className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
@@ -297,6 +308,7 @@ Sparky Platforms Inc. (C) 2026
           </button>
         </div>
       </div>
+    </div>
 
       {loading ? (
         <LoadingSpinner size="medium" />
