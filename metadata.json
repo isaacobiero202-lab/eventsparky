@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Event Spark",
+  "description": "An interactive, AI-enhanced full-stack event management platform with role-based dashboard control, image galleries, and automated descriptions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
