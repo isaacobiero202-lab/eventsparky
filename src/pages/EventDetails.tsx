@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useEvents } from '../hooks/useEvents';
 import { useRegistrations } from '../hooks/useRegistrations';
+import { supabase } from '../services/supabase';
 import { geminiService } from '../services/gemini';
 import { formatDate, formatPrice } from '../utils/formatDate';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { OrganizerControlCenter } from '../components/OrganizerControlCenter';
 import { 
   Calendar, 
   MapPin, 
@@ -25,7 +27,8 @@ import {
   Twitter,
   Facebook,
   MessageCircle,
-  Download
+  Download,
+  Activity
 } from 'lucide-react';
 import { generateICSFile } from '../utils/icsGenerator';
 
@@ -39,14 +42,18 @@ export function EventDetails() {
     cancelRegistration, 
     checkUserRegistration, 
     getFeedbackByEvent,
+    getRegistrationsByEvent,
     loading: regLoading 
   } = useRegistrations();
 
   const [event, setEvent] = useState<any>(null);
   const [feedback, setFeedback] = useState<any[]>([]);
+  const [registrations, setRegistrations] = useState<any[]>([]);
   const [isRegistered, setIsRegistered] = useState(false);
   const [activeRegId, setActiveRegId] = useState<string | null>(null);
   const [generalLoading, setGeneralLoading] = useState(true);
+  const [registrationsLoading, setRegistrationsLoading] = useState(false);
+  const [organizerMode, setOrganizerMode] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [registerLoading, setRegisterLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -92,6 +99,19 @@ export function EventDetails() {
       // Load feedback reviews
       const feedList = await getFeedbackByEvent(id);
       setFeedback(feedList);
+
+      // Load registrations if current user is the owner/organizer or admin
+      if (profile && (profile.id === item.organizer_id || profile.role === 'admin')) {
+        setRegistrationsLoading(true);
+        try {
+          const regs = await getRegistrationsByEvent(id);
+          setRegistrations(regs);
+        } catch (err) {
+          console.warn('Failed to fetch event registrations:', err);
+        } finally {
+          setRegistrationsLoading(false);
+        }
+      }
 
     } catch (err: any) {
       setErrorMsg(err.message || 'Error loading details.');
@@ -151,6 +171,44 @@ export function EventDetails() {
       startDate: event.event_date,
       durationHours: 2, // assume 2h if not specified
     });
+
+    if (profile) {
+      try {
+        const downloadLog = {
+          id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+          user_id: profile.id,
+          user_name: profile.full_name,
+          user_role: profile.role || 'attendee',
+          activity_type: 'ticket_download',
+          description: `Downloaded ticket pass for ${event.title}`,
+          related_event_id: event.id,
+          created_at: new Date().toISOString()
+        };
+
+        (async () => {
+          try {
+            const { error } = await supabase.from('activity_logs').insert(downloadLog);
+            if (error) {
+              const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+              localLogs.push(downloadLog);
+              localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+            }
+          } catch (e) {
+            const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+            localLogs.push(downloadLog);
+            localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+          }
+        })();
+
+        fetch('/api/activity-logs/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(downloadLog)
+        }).catch(() => {});
+      } catch (logErr) {
+        console.warn('Failed to log ticket download activity:', logErr);
+      }
+    }
   };
 
   const handleCancelRegistration = async () => {
@@ -270,6 +328,8 @@ export function EventDetails() {
     ? (feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length).toFixed(1)
     : null;
 
+  const isOrganizerUser = profile && (profile.id === event.organizer_id || profile.role === 'admin');
+
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Return Navigation */}
@@ -293,8 +353,52 @@ export function EventDetails() {
         )}
       </div>
 
-      {/* Hero Visual Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Control Panel Toggle headers */}
+      {isOrganizerUser && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 text-left">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl">
+              <Activity className="w-5 h-5 shrink-0" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm text-slate-800">You are Authorized as the Event Host</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Access attendee details, revenue distributions, announcements dispatching, and stats.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 w-full md:w-auto shrink-0">
+            <button
+              onClick={() => setOrganizerMode(true)}
+              className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black rounded-xl transition cursor-pointer ${
+                organizerMode ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              ⚡ Control Center
+            </button>
+            <button
+              onClick={() => setOrganizerMode(false)}
+              className={`flex-1 md:flex-initial px-4 py-2 text-xs font-black rounded-xl transition cursor-pointer ${
+                !organizerMode ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              👁️ Preview Attendee View
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isOrganizerUser && organizerMode ? (
+        <OrganizerControlCenter
+          event={event}
+          registrations={registrations}
+          feedback={feedback}
+          onRefresh={loadAllDetails}
+          profile={profile}
+        />
+      ) : (
+        /* Regular Attendee view markup below */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left main area: Description details */}
         <div className="lg:col-span-2 space-y-7">
@@ -652,6 +756,7 @@ export function EventDetails() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -89,6 +89,69 @@ async function startServer() {
     res.json({ success: true, sseBroadcastCount: txCount });
   });
 
+  // Global pool of connected SSE streams for real-time activity log feed
+  const sseActivityClients: { id: string; userId: string; res: any }[] = [];
+
+  // API ROUTE: Subscribe to activity logs via SSE (Server-Sent Events)
+  app.get('/api/activity-logs/subscribe', (req, res) => {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required for subscription' });
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+
+    const clientId = Date.now().toString() + Math.random().toString(36).slice(2, 9);
+    const newClient = {
+      id: clientId,
+      userId: userId as string,
+      res
+    };
+
+    sseActivityClients.push(newClient);
+
+    // Initial connection ping
+    res.write('data: {"type": "connected"}\n\n');
+
+    const heartbeat = setInterval(() => {
+      res.write(':\n\n');
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      const index = sseActivityClients.findIndex(c => c.id === clientId);
+      if (index !== -1) {
+        sseActivityClients.splice(index, 1);
+      }
+    });
+  });
+
+  // API ROUTE: Broadcaster for Real-time Activity Logs
+  app.post('/api/activity-logs/emit', (req, res) => {
+    const activity = req.body;
+    if (!activity) {
+      return res.status(400).json({ error: 'Activity details are required' });
+    }
+
+    let txCount = 0;
+    sseActivityClients.forEach(client => {
+      // Send if client is user who triggered it, OR matches the organizer recipient, or role is admin
+      if (
+        client.userId === activity.user_id || 
+        (activity.target_organizer_id && client.userId === activity.target_organizer_id)
+      ) {
+        client.res.write(`data: ${JSON.stringify(activity)}\n\n`);
+        txCount++;
+      }
+    });
+
+    res.json({ success: true, sseBroadcastCount: txCount });
+  });
+
   // API ROUTE: Get Supabase Credentials dynamically from backend environment
   app.get('/api/supabase-config', (req, res) => {
     res.json({

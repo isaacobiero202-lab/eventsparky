@@ -171,7 +171,9 @@ export function useEvents() {
             };
 
             // Store in DB
-            await supabase.from('notifications').insert(attendeeNotif).catch(() => {});
+            try {
+              await supabase.from('notifications').insert(attendeeNotif);
+            } catch (err) {}
 
             // Broadcast inside the server SSE stream
             const emailPref = localStorage.getItem('event-spark-email-notifications') !== 'false';
@@ -185,6 +187,70 @@ export function useEvents() {
             }).catch(() => {});
           }
         }
+
+        // Add secure activity logs for creation
+        try {
+          const organizerLog = {
+            id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+            user_id: profile.id,
+            user_name: profile.full_name || 'Organizer',
+            user_role: 'organizer',
+            activity_type: 'creation',
+            description: `${profile.full_name || 'Organizer'} published "${data.title}"`,
+            related_event_id: data.id,
+            created_at: new Date().toISOString()
+          };
+
+          // Insert into database
+          const { error: dbL } = await supabase.from('activity_logs').insert(organizerLog);
+          if (dbL) {
+            const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+            localLogs.push(organizerLog);
+            localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+          }
+
+          // Broadcast to organizer
+          await fetch('/api/activity-logs/emit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(organizerLog)
+          }).catch(() => {});
+
+          // Add logs for all registered attendees so they see "New event added: ..."
+          if (attendees && attendees.length > 0) {
+            const attendeeLogs = attendees.map((att: any) => ({
+              id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+              user_id: att.id,
+              user_name: att.full_name,
+              user_role: 'attendee',
+              activity_type: 'creation',
+              description: `New event added: ${data.title}`,
+              related_event_id: data.id,
+              created_at: new Date().toISOString()
+            }));
+
+            try {
+              await supabase.from('activity_logs').insert(attendeeLogs);
+            } catch (err) {}
+
+            // Save to fallback mock logs as well
+            const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+            localLogs.push(...attendeeLogs);
+            localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+
+            // Broadcast to SSE streams for each attendee
+            for (const attLog of attendeeLogs) {
+              await fetch('/api/activity-logs/emit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(attLog)
+              }).catch(() => {});
+            }
+          }
+        } catch (logErr: any) {
+          console.warn('Could not launch event creation activity logs stream:', logErr.message);
+        }
+
       } catch (notifErr: any) {
         console.warn('Could not launch attendee event notifications stream:', notifErr.message);
       }
@@ -217,6 +283,36 @@ export function useEvents() {
         .single();
 
       if (updateErr) throw updateErr;
+
+      // Log update action
+      try {
+        const updateLog = {
+          id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+          user_id: profile?.id || 'unknown',
+          user_name: profile?.full_name || 'Organizer',
+          user_role: 'organizer',
+          activity_type: 'update',
+          description: `${profile?.full_name || 'Organizer'} updated event "${data?.title || 'Event'}"`,
+          related_event_id: eventId,
+          created_at: new Date().toISOString()
+        };
+
+        const { error: dbL } = await supabase.from('activity_logs').insert(updateLog);
+        if (dbL) {
+          const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+          localLogs.push(updateLog);
+          localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+        }
+
+        await fetch('/api/activity-logs/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateLog)
+        }).catch(() => {});
+      } catch (logErr) {
+        console.warn('Failed to log event update:', logErr);
+      }
+
       return data;
     } catch (err: any) {
       console.error('Error updating event:', err.message);
@@ -225,7 +321,7 @@ export function useEvents() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile]);
 
   /**
    * Deletes an event by ID
@@ -234,12 +330,56 @@ export function useEvents() {
     setLoading(true);
     setError(null);
     try {
+      // Get title first before deletion or from local mock
+      let eventTitle = 'Event';
+      try {
+        const { data: evt } = await supabase.from('events').select('title').eq('id', eventId).maybeSingle();
+        if (evt) {
+          eventTitle = evt.title;
+        } else {
+          // fallback to localStorage
+          const localEvts = JSON.parse(localStorage.getItem('mock_events') || '[]');
+          const match = localEvts.find((e: any) => e.id === eventId);
+          if (match) eventTitle = match.title;
+        }
+      } catch (e) {}
+
       const { error: deleteErr } = await supabase
         .from('events')
         .delete()
         .eq('id', eventId);
 
       if (deleteErr) throw deleteErr;
+
+      // Log delete/cancel activity
+      try {
+        const deleteLog = {
+          id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+          user_id: profile?.id || 'unknown',
+          user_name: profile?.full_name || 'Organizer',
+          user_role: 'organizer',
+          activity_type: 'cancellation',
+          description: `${profile?.full_name || 'Organizer'} cancelled event "${eventTitle}"`,
+          related_event_id: null,
+          created_at: new Date().toISOString()
+        };
+
+        const { error: dbL } = await supabase.from('activity_logs').insert(deleteLog);
+        if (dbL) {
+          const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+          localLogs.push(deleteLog);
+          localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+        }
+
+        await fetch('/api/activity-logs/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(deleteLog)
+        }).catch(() => {});
+      } catch (logErr) {
+        console.warn('Failed to log event deletion:', logErr);
+      }
+
       return true;
     } catch (err: any) {
       console.error('Error deleting event:', err.message);
@@ -248,7 +388,7 @@ export function useEvents() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile]);
 
   /**
    * Helper to read a file as a Base64 string for robust fallback

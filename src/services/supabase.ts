@@ -116,6 +116,50 @@ class MockQueryBuilder {
     } else if (this.table === 'notifications') {
       const defaultNotifications: any[] = [];
       localStorage.setItem('mock_notifications', JSON.stringify(defaultNotifications));
+    } else if (this.table === 'activity_logs') {
+      const defaultLogs = [
+        {
+          id: 'mock-log-1',
+          user_id: 'mock-attendee-1',
+          user_name: 'John Doe',
+          user_role: 'attendee',
+          activity_type: 'booking',
+          description: 'John Doe booked 2 tickets for Tech Summit 2026',
+          related_event_id: 'mock-event-1',
+          created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString()
+        },
+        {
+          id: 'mock-log-2',
+          user_id: 'mock-attendee-2',
+          user_name: 'Mary Wanjiku',
+          user_role: 'attendee',
+          activity_type: 'registration',
+          description: 'Mary Wanjiku registered for Urban Rooftop Gardening',
+          related_event_id: 'mock-event-2',
+          created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString()
+        },
+        {
+          id: 'mock-log-3',
+          user_id: 'mock-organizer-1',
+          user_name: 'Jane Doe (Organizer)',
+          user_role: 'organizer',
+          activity_type: 'payment',
+          description: 'Payment received for Silicon Valley AI Summit',
+          related_event_id: 'mock-event-1',
+          created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 'mock-log-4',
+          user_id: 'mock-organizer-1',
+          user_name: 'Jane Doe (Organizer)',
+          user_role: 'organizer',
+          activity_type: 'creation',
+          description: 'Jane Doe (Organizer) published Silicon Valley AI Summit',
+          related_event_id: 'mock-event-1',
+          created_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+        }
+      ];
+      localStorage.setItem('mock_activity_logs', JSON.stringify(defaultLogs));
     }
   }
 
@@ -642,7 +686,28 @@ function makeSafeProxy(realObj: any, fallbackObj: any, chain: FluentChain = new 
       if (prop === 'then') {
         return function(onfulfilled: any, onrejected: any) {
           return Promise.resolve(realObj).then(
-            (val) => {
+            async (val) => {
+              const errMsg = String(val?.error?.message || val?.error || '');
+              if (val && val.error && (
+                errMsg.includes('fetch') ||
+                errMsg.includes('TypeError') ||
+                errMsg.includes('Failed to fetch') ||
+                errMsg.includes('NetworkError') ||
+                errMsg.includes('network') ||
+                errMsg.includes('Failed to execute')
+              )) {
+                console.warn('[Supabase] Live database query returned a fetch/network error payload. Seamlessly switching to local mockup mode:', errMsg);
+                activeClient = null;
+                isSupabaseConfigured = false;
+                try {
+                  const mockResult = await chain.execute(mockClientFallback);
+                  if (onfulfilled) return onfulfilled(mockResult);
+                  return mockResult;
+                } catch (mockErr) {
+                  if (onrejected) return onrejected(mockErr);
+                  throw mockErr;
+                }
+              }
               if (onfulfilled) return onfulfilled(val);
               return val;
             },

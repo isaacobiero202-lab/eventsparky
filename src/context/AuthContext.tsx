@@ -136,6 +136,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               console.warn('Explicit profile insertion skipped, profile might be handled by trigger or RLS policies:', profileError.message);
             }
           }
+
+          // Add activity log for new account registration
+          try {
+            const signUpLog = {
+              id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+              user_id: data.user.id,
+              user_name: fullName,
+              user_role: role,
+              activity_type: 'registration',
+              description: `New user registered: ${fullName} (${role})`,
+              related_event_id: null,
+              created_at: new Date().toISOString()
+            };
+
+            const { error: dbL } = await supabase.from('activity_logs').insert(signUpLog);
+            if (dbL) {
+              const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+              localLogs.push(signUpLog);
+              localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+            }
+
+            // Broadcast real-time activity log
+            await fetch('/api/activity-logs/emit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(signUpLog)
+            }).catch(() => {});
+          } catch (logErr) {
+            console.warn('Failed to log new signup:', logErr);
+          }
+
         } catch (profileErr: any) {
           console.warn('Explicit profile check/insert skipped:', profileErr.message);
         }

@@ -122,6 +122,63 @@ export function useRegistrations() {
             emailEnabled: emailPref
           })
         });
+
+        // Add secure activity logs & broadcast real-time status
+        try {
+          const registrationLog = {
+            id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+            user_id: profile.id,
+            user_name: profile.full_name,
+            user_role: 'attendee',
+            activity_type: 'booking',
+            description: `${profile.full_name} registered for ${event.title}`,
+            related_event_id: eventId,
+            created_at: new Date().toISOString()
+          };
+
+          const paymentLog = {
+            id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+            user_id: profile.id,
+            user_name: profile.full_name,
+            user_role: 'attendee',
+            activity_type: 'payment',
+            description: `Payment confirmed for ${event.title}`,
+            related_event_id: eventId,
+            created_at: new Date().toISOString()
+          };
+
+          // Insert into Supabase (if table exists, else fallback to mock storage)
+          const { error: dbL1 } = await supabase.from('activity_logs').insert([registrationLog, paymentLog]);
+          if (dbL1) {
+            const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+            localLogs.push(registrationLog, paymentLog);
+            localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+          }
+
+          // Broadcast registration log to organizer & attendee live Dashboard SSE streams
+          await fetch('/api/activity-logs/emit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...registrationLog,
+              target_organizer_id: event.organizer_id
+            })
+          }).catch(() => {});
+
+          // Broadcast payment log to organizer & attendee live Dashboard SSE streams
+          await fetch('/api/activity-logs/emit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...paymentLog,
+              target_organizer_id: event.organizer_id
+            })
+          }).catch(() => {});
+
+        } catch (logErr: any) {
+          console.warn('Could not launch registration activity logs stream:', logErr.message);
+        }
+
       } catch (notifErr: any) {
         console.warn('Failed to send real-time notification to organizer:', notifErr.message);
       }

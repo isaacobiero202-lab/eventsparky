@@ -152,6 +152,59 @@ ON public.feedback FOR INSERT WITH CHECK (
 );
 
 -- ====================================================================
+-- 5. NOTIFICATIONS TABLE
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  is_read BOOLEAN DEFAULT false NOT NULL,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ====================================================================
+-- 6. ACTIVITY LOGS TABLE (Auditing and Real-time Recent Activity)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.activity_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  user_role TEXT CHECK (user_role IN ('admin', 'organizer', 'attendee')) NOT NULL,
+  activity_type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  related_event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS for notifications and activity_logs
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- Notifications Policies
+CREATE POLICY "Users can select their own notifications"
+ON public.notifications FOR SELECT USING (user_id = auth.uid());
+
+CREATE POLICY "Users can insert notifications"
+ON public.notifications FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Users can update their own notifications"
+ON public.notifications FOR UPDATE USING (user_id = auth.uid());
+
+CREATE POLICY "Users can delete their own notifications"
+ON public.notifications FOR DELETE USING (user_id = auth.uid());
+
+-- Activity Logs Policies
+CREATE POLICY "Users can select activity logs"
+ON public.activity_logs FOR SELECT USING (true);
+
+CREATE POLICY "Anyone can insert activity logs"
+ON public.activity_logs FOR INSERT WITH CHECK (true);
+
+-- ====================================================================
 -- BUCKETS SETUP (Execute inside Supabase Storage Dashboard)
 -- Create two public buckets: 'event-posters' and 'avatars'
 -- ====================================================================
+

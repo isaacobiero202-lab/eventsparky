@@ -26,6 +26,39 @@ export function Profile() {
         full_name: fullName.trim(),
         avatar_url: avatarUrl,
       });
+
+      if (profile) {
+        try {
+          const updateLog = {
+            id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+            user_id: profile.id,
+            user_name: fullName.trim(),
+            user_role: profile.role || 'attendee',
+            activity_type: 'profile_update',
+            description: `Successfully updated profile details`,
+            related_event_id: null,
+            created_at: new Date().toISOString()
+          };
+
+          const { supabase } = await import('../services/supabase');
+          try {
+            await supabase.from('activity_logs').insert(updateLog);
+          } catch (err) {}
+          
+          const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+          localLogs.push(updateLog);
+          localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+
+          await fetch('/api/activity-logs/emit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateLog)
+          }).catch(() => {});
+        } catch (logErr) {
+          console.warn('Failed to log profile update:', logErr);
+        }
+      }
+
       setSuccessMsg('Profile updated successfully!');
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {

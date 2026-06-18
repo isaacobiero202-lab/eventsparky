@@ -6,6 +6,7 @@ import { useRegistrations } from '../hooks/useRegistrations';
 import { StatsCards } from '../components/dashboard/StatsCards';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { AICopilotSidebar } from '../components/dashboard/AICopilotSidebar';
+import { RecentActivity } from '../components/dashboard/RecentActivity';
 import { formatDate, formatPrice } from '../utils/formatDate';
 import { 
   Users, 
@@ -69,6 +70,53 @@ export function Dashboard() {
       } catch (err) {
         console.error('Delete event action failed:', err);
       }
+    }
+  };
+
+  const handleGenerateReport = async (eventTitle: string, eventId: string) => {
+    try {
+      // Simulate CSV file download containing registrant trail data
+      const headers = 'ID,Full Name,Email,Registered At,Status\n';
+      const rows = `mock-reg-1,John Doe,user@eventspark.com,${new Date().toISOString()},registered\n`;
+      const blob = new Blob([headers + rows], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `${eventTitle.toLowerCase().replace(/\s+/g, '_')}_registrants_report.csv`);
+      a.click();
+
+      // Log report generation activity
+      if (profile) {
+        const reportLog = {
+          id: crypto.randomUUID ? crypto.randomUUID() : 'log-' + Math.random().toString(36).slice(2, 11),
+          user_id: profile.id,
+          user_name: profile.full_name,
+          user_role: profile.role || 'organizer',
+          activity_type: 'report_generation',
+          description: `Generated download report for "${eventTitle}"`,
+          related_event_id: eventId,
+          created_at: new Date().toISOString()
+        };
+
+        const { supabase } = await import('../services/supabase');
+        try {
+          await supabase.from('activity_logs').insert(reportLog);
+        } catch (err) {}
+        
+        const localLogs = JSON.parse(localStorage.getItem('mock_activity_logs') || '[]');
+        localLogs.push(reportLog);
+        localStorage.setItem('mock_activity_logs', JSON.stringify(localLogs));
+
+        await fetch('/api/activity-logs/emit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reportLog)
+        }).catch(() => {});
+      }
+
+      alert(`Report generated successfully for "${eventTitle}"!`);
+    } catch (err: any) {
+      console.error('Report simulation failed:', err);
     }
   };
 
@@ -273,6 +321,13 @@ export function Dashboard() {
                               >
                                 Delete
                               </button>
+                              <button
+                                onClick={() => handleGenerateReport(ev.title, ev.id)}
+                                className="text-xs font-bold text-emerald-600 hover:text-emerald-700 pl-2 border-l border-slate-200 cursor-pointer"
+                                title="Export complete audit trail as CSV"
+                              >
+                                Report
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -365,6 +420,9 @@ export function Dashboard() {
                 )}
               </div>
             )}
+
+            {/* Dynamic Real-time Recent Activity Log Feed */}
+            <RecentActivity />
           </div>
 
         </div>
