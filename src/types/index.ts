@@ -11,6 +11,7 @@ export interface Profile {
 
 export interface Event {
   id: string;
+  slug?: string;
   title: string;
   description: string | null;
   location: string | null;

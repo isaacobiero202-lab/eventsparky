@@ -13,7 +13,9 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
 
   // Grab the redirect location if passed
-  const from = location.state?.from?.pathname || '/dashboard';
+  const queryParams = new URLSearchParams(location.search);
+  const redirectParam = queryParams.get('redirect');
+  const from = redirectParam || location.state?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

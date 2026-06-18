@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { UserRole } from '../types';
 import { Sparkles, Mail, Lock, User, UserCheck, Shield, Loader, AlertCircle } from 'lucide-react';
@@ -7,6 +7,11 @@ import { Sparkles, Mail, Lock, User, UserCheck, Shield, Loader, AlertCircle } fr
 export function Register() {
   const { signUp, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const queryParams = new URLSearchParams(location.search);
+  const redirectParam = queryParams.get('redirect');
+  const from = redirectParam || '/dashboard';
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -31,8 +36,8 @@ export function Register() {
       await signUp(email, password, fullName, role);
       setSuccess(true);
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
+        navigate(from, { replace: true });
+      }, 1500);
     } catch (err: any) {
       console.error('Registration error:', err);
       setError(err.message || 'Registration failed. Please make sure the email is valid.');

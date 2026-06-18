@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase';
 import { Event } from '../types';
 import { useAuth } from './useAuth';
 import { queryCache } from '../services/supabaseCache';
+import { slugify } from '../utils/slugify';
 
 /**
  * Custom hook for managing event-related actions in Supabase.
@@ -99,7 +100,14 @@ export function useEvents() {
    * Fetches full event details for a single event by ID, including its registration count
    */
   const getEventById = useCallback(async (id: string, forceRefresh?: boolean): Promise<Event | null> => {
-    const cacheKey = `events:id:${id}`;
+    return getEventByIdOrSlug(id, forceRefresh);
+  }, []);
+
+  /**
+   * Fetches full event details for a single event by ID or Slug, including its registration count
+   */
+  const getEventByIdOrSlug = useCallback(async (idOrSlug: string, forceRefresh?: boolean): Promise<Event | null> => {
+    const cacheKey = `events:idOrSlug:${idOrSlug}`;
     if (!forceRefresh) {
       const cached = queryCache.get<Event | null>(cacheKey);
       if (cached !== null && cached !== undefined) return cached;
@@ -108,44 +116,88 @@ export function useEvents() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: fetchErr } = await supabase
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrSlug) || idOrSlug.startsWith('mock-');
+      if (isUuid) {
+        const { data, error: fetchErr } = await supabase
+          .from('events')
+          .select(`
+            *,
+            organizer:profiles(*),
+            registrations(id, status)
+          `)
+          .eq('id', idOrSlug)
+          .maybeSingle();
+
+        if (!fetchErr && data) {
+          const activeRegistrations = data.registrations?.filter((r: any) => r.status === 'registered') || [];
+          const localCancelledList = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('eventspark_cancelled_events') || '{}') : {};
+          const isCancelled = !!localCancelledList[data.id] || data.is_cancelled === true || data.status === 'cancelled';
+          const eventDetails: Event = {
+            id: data.id,
+            slug: data.slug || slugify(data.title),
+            title: data.title,
+            description: data.description,
+            location: data.location,
+            event_date: data.event_date,
+            capacity: data.capacity,
+            price: data.price ? parseFloat(data.price) : 0,
+            image_url: data.image_url,
+            organizer_id: data.organizer_id,
+            created_at: data.created_at,
+            organizer: data.organizer,
+            is_cancelled: isCancelled,
+            status: isCancelled ? 'cancelled' : 'published',
+            registration_count: activeRegistrations.length
+          };
+          queryCache.set(cacheKey, eventDetails);
+          return eventDetails;
+        }
+      }
+
+      // If not UUID or not found by direct ID, fetch list and scan for matching slug/id
+      const { data: list, error: fetchListErr } = await supabase
         .from('events')
         .select(`
           *,
           organizer:profiles(*),
           registrations(id, status)
-        `)
-        .eq('id', id)
-        .single();
+        `);
 
-      if (fetchErr) throw fetchErr;
+      if (fetchListErr) throw fetchListErr;
 
-      const activeRegistrations = data.registrations?.filter((r: any) => r.status === 'registered') || [];
+      const matched = (list || []).find((e: any) => {
+        const s = e.slug || slugify(e.title);
+        return s === idOrSlug || e.id === idOrSlug;
+      });
 
-      const localCancelledList = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('eventspark_cancelled_events') || '{}') : {};
-      const isCancelled = !!localCancelledList[data.id] || data.is_cancelled === true || data.status === 'cancelled';
+      if (matched) {
+        const activeRegistrations = matched.registrations?.filter((r: any) => r.status === 'registered') || [];
+        const localCancelledList = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('eventspark_cancelled_events') || '{}') : {};
+        const isCancelled = !!localCancelledList[matched.id] || matched.is_cancelled === true || matched.status === 'cancelled';
+        const eventDetails: Event = {
+          id: matched.id,
+          slug: matched.slug || slugify(matched.title),
+          title: matched.title,
+          description: matched.description,
+          location: matched.location,
+          event_date: matched.event_date,
+          capacity: matched.capacity,
+          price: matched.price ? parseFloat(matched.price) : 0,
+          image_url: matched.image_url,
+          organizer_id: matched.organizer_id,
+          created_at: matched.created_at,
+          organizer: matched.organizer,
+          is_cancelled: isCancelled,
+          status: isCancelled ? 'cancelled' : 'published',
+          registration_count: activeRegistrations.length
+        };
+        queryCache.set(cacheKey, eventDetails);
+        return eventDetails;
+      }
 
-      const eventDetails: Event = {
-        id: data.id,
-        title: data.title,
-        description: data.description,
-        location: data.location,
-        event_date: data.event_date,
-        capacity: data.capacity,
-        price: data.price ? parseFloat(data.price) : 0,
-        image_url: data.image_url,
-        organizer_id: data.organizer_id,
-        created_at: data.created_at,
-        organizer: data.organizer,
-        is_cancelled: isCancelled,
-        status: isCancelled ? 'cancelled' : 'published',
-        registration_count: activeRegistrations.length
-      };
-
-      queryCache.set(cacheKey, eventDetails);
-      return eventDetails;
+      return null;
     } catch (err: any) {
-      console.error('Error fetching event details:', err.message);
+      console.error('Error fetching event details by slug/id:', err.message);
       setError(err.message);
       return null;
     } finally {
@@ -587,6 +639,7 @@ export function useEvents() {
     error,
     getEvents,
     getEventById,
+    getEventByIdOrSlug,
     createEvent,
     updateEvent,
     deleteEvent,

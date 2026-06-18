@@ -38,12 +38,13 @@ import {
   CopyCheck
 } from 'lucide-react';
 import { generateICSFile } from '../utils/icsGenerator';
+import { CheckoutModal } from '../components/events/CheckoutModal';
 
 export function EventDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile, loading: authLoading } = useAuth();
-  const { getEventById, getEvents, loading: eventLoading } = useEvents();
+  const { getEventById, getEventByIdOrSlug, getEvents, loading: eventLoading } = useEvents();
   const { 
     registerForEvent, 
     cancelRegistration, 
@@ -59,6 +60,7 @@ export function EventDetails() {
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [isRegistered, setIsRegistered] = useState(false);
   const [activeRegId, setActiveRegId] = useState<string | null>(null);
+  const [showCheckout, setShowCheckout] = useState(false);
   const [generalLoading, setGeneralLoading] = useState(true);
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
   const [organizerMode, setOrganizerMode] = useState(true);
@@ -66,6 +68,18 @@ export function EventDetails() {
   const [registerLoading, setRegisterLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    if (event) {
+      try {
+        const saved = localStorage.getItem('eventspark_saved_events');
+        if (saved) {
+          setIsSaved(JSON.parse(saved).includes(event.id));
+        }
+      } catch (e) {}
+    }
+  }, [event]);
 
   // Gemini State counters
   const [agenda, setAgenda] = useState<string | null>(null);
@@ -88,7 +102,7 @@ export function EventDetails() {
       setErrorMsg(null);
 
       // Load event entity
-      const item = await getEventById(id);
+      const item = await getEventByIdOrSlug(id);
       if (!item) {
         setErrorMsg('We are unable to resolve this event specifications.');
         return;
@@ -140,6 +154,30 @@ export function EventDetails() {
     loadAllDetails();
   }, [id, profile]);
 
+  // Catch stored user intents/pending action after authentication returns
+  useEffect(() => {
+    if (profile && event) {
+      const pendingActionDataStr = localStorage.getItem('eventspark_pending_action');
+      if (pendingActionDataStr) {
+        try {
+          const pendingActionData = JSON.parse(pendingActionDataStr);
+          if (pendingActionData.eventSlug === id || pendingActionData.eventId === event.id) {
+            localStorage.removeItem('eventspark_pending_action');
+            if (pendingActionData.action === 'checkout') {
+              setShowCheckout(true);
+            } else if (pendingActionData.action === 'register') {
+              handleRegister();
+            } else if (pendingActionData.action === 'save') {
+              handleSaveEvent();
+            }
+          }
+        } catch (e) {
+          console.error('Error restoring pending action user intent:', e);
+        }
+      }
+    }
+  }, [profile, event, id]);
+
   // Real-time pre-event countdown calculations
   useEffect(() => {
     if (!event?.event_date) return;
@@ -164,7 +202,13 @@ export function EventDetails() {
 
   const handleRegister = async () => {
     if (!profile) {
-      navigate('/login', { state: { from: { pathname: `/events/${id}` } } });
+      // Store user intent in localStorage
+      localStorage.setItem('eventspark_pending_action', JSON.stringify({
+        action: 'checkout',
+        eventSlug: id,
+        eventId: event?.id
+      }));
+      navigate(`/login?redirect=${encodeURIComponent(`/events/${id}`)}&action=checkout`);
       return;
     }
 
@@ -173,27 +217,7 @@ export function EventDetails() {
       return;
     }
 
-    try {
-      setRegisterLoading(true);
-      setErrorMsg(null);
-      setSuccessMsg(null);
-      await registerForEvent(event.id);
-      setSuccessMsg('Seat successfully booked! We have reserved your spot.');
-      await loadAllDetails();
-    } catch (err: any) {
-      const isAlreadyReg = err.message && (
-        err.message.toLowerCase().includes('already registered') || 
-        err.message.toLowerCase().includes('already registered for this event')
-      );
-      if (isAlreadyReg) {
-        setIsRegistered(true);
-        setSuccessMsg("You are already registered for this event.");
-      } else {
-        setErrorMsg(err.message || 'Error booking seat ticket.');
-      }
-    } finally {
-      setRegisterLoading(false);
-    }
+    setShowCheckout(true);
   };
 
   const handleCancelRegistration = async () => {
@@ -213,6 +237,35 @@ export function EventDetails() {
       } finally {
         setRegisterLoading(false);
       }
+    }
+  };
+
+  const handleSaveEvent = () => {
+    if (!profile) {
+      localStorage.setItem('eventspark_pending_action', JSON.stringify({
+        action: 'save',
+        eventSlug: id,
+        eventId: event?.id
+      }));
+      navigate(`/login?redirect=${encodeURIComponent(`/events/${id}`)}&action=save`);
+      return;
+    }
+
+    try {
+      const savedList = JSON.parse(localStorage.getItem('eventspark_saved_events') || '[]');
+      if (savedList.includes(event.id)) {
+        const updated = savedList.filter((x: string) => x !== event.id);
+        localStorage.setItem('eventspark_saved_events', JSON.stringify(updated));
+        setIsSaved(false);
+        setSuccessMsg('Removed event from your saved bookmark list.');
+      } else {
+        savedList.push(event.id);
+        localStorage.setItem('eventspark_saved_events', JSON.stringify(savedList));
+        setIsSaved(true);
+        setSuccessMsg('Event saved successfully to your bookmark list! ❤️');
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -892,19 +945,41 @@ export function EventDetails() {
                   </div>
                 </div>
               ) : isRegistered ? (
-                <div className="space-y-3 p-4 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl flex flex-col items-center">
-                  <CheckCircle className="w-10 h-10 text-emerald-600 animate-bounce" />
-                  <div>
-                    <h4 className="font-extrabold text-sm text-center leading-none">Registration Confirmed</h4>
-                    <p className="text-[10px] mt-1 text-emerald-600">You hold an active seat reservation.</p>
+                <div className="space-y-3">
+                  <div className="p-4 bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl flex flex-col items-center">
+                    <CheckCircle className="w-10 h-10 text-emerald-600 animate-bounce" />
+                    <div>
+                      <h4 className="font-extrabold text-sm text-center leading-none">Registration Confirmed</h4>
+                      <p className="text-[10px] mt-1 text-emerald-600">You hold an active seat reservation.</p>
+                    </div>
+                    
+                    <button
+                      onClick={handleCancelRegistration}
+                      disabled={registerLoading}
+                      className="text-xs font-semibold text-rose-500 hover:text-rose-700 hover:underline pt-2 cursor-pointer disabled:text-rose-300"
+                    >
+                      {registerLoading ? 'Processing...' : 'Cancel Registration?'}
+                    </button>
                   </div>
-                  
+
+                  {/* Let registered users purchase group seat categories or VIP passes too if they want */}
                   <button
-                    onClick={handleCancelRegistration}
-                    disabled={registerLoading}
-                    className="text-xs font-semibold text-rose-500 hover:text-rose-700 hover:underline pt-2 cursor-pointer disabled:text-rose-300"
+                    onClick={() => setShowCheckout(true)}
+                    className="w-full inline-flex items-center justify-center space-x-2 py-2.5 px-4 font-bold text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-xs cursor-pointer"
                   >
-                    {registerLoading ? 'Processing...' : 'Cancel Registration?'}
+                    <span>Purchase Additional Passes</span>
+                  </button>
+
+                  <button
+                    onClick={handleSaveEvent}
+                    className={`w-full inline-flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                      isSaved 
+                      ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100' 
+                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900'
+                    }`}
+                  >
+                    <Star className={`w-4 h-4 ${isSaved ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
+                    <span>{isSaved ? 'Saved to Bookmark' : 'Save Event Bookmark'}</span>
                   </button>
                 </div>
               ) : isSoldOut ? (
@@ -925,7 +1000,7 @@ export function EventDetails() {
                       <span>Hurry! Only {spotsLeft} seats remaining!</span>
                     </p>
                   )}
-
+                  
                   <button
                     onClick={handleRegister}
                     disabled={registerLoading}
@@ -939,6 +1014,18 @@ export function EventDetails() {
                     ) : (
                       <span>Book Seat Ticket</span>
                     )}
+                  </button>
+
+                  <button
+                    onClick={handleSaveEvent}
+                    className={`w-full inline-flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                      isSaved 
+                      ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100' 
+                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900'
+                    }`}
+                  >
+                    <Star className={`w-4 h-4 ${isSaved ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
+                    <span>{isSaved ? 'Saved to Bookmark' : 'Save Event Bookmark'}</span>
                   </button>
                 </div>
               )}
@@ -1101,6 +1188,17 @@ export function EventDetails() {
             </div>
           </div>
         </div>
+      )}
+
+      {showCheckout && event && (
+        <CheckoutModal
+          event={event}
+          onClose={() => setShowCheckout(false)}
+          onSuccess={() => {
+            loadAllDetails();
+            setSuccessMsg('Your security tickets have been generated successfully! ✨');
+          }}
+        />
       )}
     </div>
   );
